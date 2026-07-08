@@ -1,148 +1,258 @@
+"""
+Módulo principal de orquestación del pipeline de reportes de consumo SaludIPS.
+
+Contiene:
+- ConsumoPipeline: Clase orquestadora que ejecuta los 5 pasos del pipeline.
+- leer_informes_consumos: Función utilitaria para lectura directa de archivos.
+- alistamiento_para_informes: Función de resumen por municipio/servicio.
+"""
 from datetime import time
+from pathlib import Path
 import re
-import os 
 import sys
-from playwright.sync_api import Playwright, sync_playwright, expect
-import polars as pl 
+import traceback
+
+import polars as pl
+
+# ──────────────────────────────────────────────
+# Imports de los módulos del pipeline
+# ──────────────────────────────────────────────
+from scripts.descargar_info import ejecutar_descarga, obtener_fechas_usuario
+from scripts.lectura_proceso import cargar_datos
+from scripts.revision_informes import revisiones
+from scripts.desviaciones import desviaciones
+from scripts.informe_consumo import hacer_informe
 
 
+# ══════════════════════════════════════════════
+# CLASE ORQUESTADORA DEL PIPELINE
+# ══════════════════════════════════════════════
 
-# def obtener_fechas_usuario() -> tuple:
-#     # Valores por defecto
-#     fecha_inicio = "01/04/2026"
-#     fecha_fin = "30/04/2026"
-    
-#     # Si se pasaron por argumentos de línea de comandos (ej: python script.py DD/MM/AAAA DD/MM/AAAA)
-#     if len(sys.argv) >= 3:
-#         fecha_inicio = sys.argv[1]
-#         fecha_fin = sys.argv[2]
-#         print(f"Usando fechas desde argumentos: Inicio={fecha_inicio}, Fin={fecha_fin}")
-#     else:
-#         # Preguntar en consola al usuario
-#         print("\n=== CONFIGURACIÓN DE FECHAS PARA EL REPORTE ===")
-#         try:
-#             val_ini = input(f"Ingrese Fecha Inicio (DD/MM/AAAA) [Presione Enter para {fecha_inicio}]: ").strip()
-#             if val_ini:
-#                 fecha_inicio = val_ini
+class ConsumoPipeline:
+    """
+    Orquesta la ejecución secuencial de los 5 pasos del pipeline de reportes.
+
+    Pasos:
+        1. Descarga de archivos desde SaludIPS.
+        2. Carga dinámica de datos con las rutas generadas.
+        3. Auditoría de inconsistencias en centros de costo.
+        4. Análisis de desviaciones estadísticas.
+        5. Generación del informe final de consumos.
+    """
+
+    def __init__(self, fecha_inicio: str, fecha_fin: str):
+        """
+        Inicializa el pipeline con las fechas del período a procesar.
+
+        Args:
+            fecha_inicio: Fecha inicio en formato DD/MM/AAAA.
+            fecha_fin: Fecha fin en formato DD/MM/AAAA.
+        """
+        self.fecha_inicio = fecha_inicio
+        self.fecha_fin = fecha_fin
+        self.mes_informe = fecha_inicio[3:5]
+
+        # Resultados intermedios de cada paso
+        self.rutas_descargadas: dict = {}
+        self.consumos_facturacion = None
+        self.facturacion_productos = None
+        self.entradas = None
+        self.listado_productos = None
+        self.inconsistencias = None
+        self.datos_desviaciones = None
+        self.resultados_informe = None
+
+    # ── Paso 1: Descarga ──
+    def paso_1_descarga(self) -> dict:
+        """Ejecuta la descarga de archivos desde SaludIPS vía Playwright."""
+        print("\n" + "=" * 60)
+        print("PASO 1: DESCARGA DE ARCHIVOS")
+        print("=" * 60)
+        try:
+            self.rutas_descargadas = ejecutar_descarga(self.fecha_inicio, self.fecha_fin)
+            print(f"✓ Paso 1 completado. Archivos: {list(self.rutas_descargadas.keys())}")
+            return self.rutas_descargadas
+        except Exception as e:
+            print(f"✗ Error en Paso 1 (Descarga): {e}")
+            traceback.print_exc()
+            raise
+
+    # ── Paso 2: Carga dinámica ──
+    def paso_2_carga(self, rutas: dict = None) -> tuple:
+        """
+        Carga los DataFrames usando las rutas del paso 1 o rutas proporcionadas.
+
+        Args:
+            rutas: dict con rutas de archivos. Si es None, usa self.rutas_descargadas.
+        """
+        print("\n" + "=" * 60)
+        print("PASO 2: CARGA DINÁMICA DE DATOS")
+        print("=" * 60)
+        try:
+            rutas_a_usar = rutas or self.rutas_descargadas
+            if not rutas_a_usar:
+                raise ValueError("No hay rutas disponibles. Ejecute paso_1_descarga() primero o proporcione rutas.")
+
+            (self.consumos_facturacion,
+             self.facturacion_productos,
+             self.entradas,
+             self.listado_productos) = cargar_datos(rutas_a_usar)
+
+            print(f"✓ Paso 2 completado.")
+            print(f"  - consumos_facturacion: {self.consumos_facturacion.shape}")
+            print(f"  - facturacion_productos: {self.facturacion_productos.shape}")
+            print(f"  - entradas: {self.entradas.shape}")
+            return (self.consumos_facturacion, self.facturacion_productos, 
+                    self.entradas, self.listado_productos)
+        except Exception as e:
+            print(f"✗ Error en Paso 2 (Carga): {e}")
+            traceback.print_exc()
+            raise
+
+    # ── Paso 3: Auditoría ──
+    def paso_3_auditoria(self, consumos_facturados: pl.DataFrame = None) -> pl.DataFrame:
+        """
+        Ejecuta revisiones de consistencia sobre los consumos facturados.
+
+        Args:
+            consumos_facturados: DataFrame de consumos. Si es None, usa self.consumos_facturacion.
+        """
+        print("\n" + "=" * 60)
+        print("PASO 3: AUDITORÍA DE INCONSISTENCIAS")
+        print("=" * 60)
+        try:
+            datos = consumos_facturados if consumos_facturados is not None else self.consumos_facturacion
+            if datos is None:
+                raise ValueError("No hay datos de consumos. Ejecute paso_2_carga() primero.")
+
+            self.inconsistencias = revisiones(datos)
+            print(f"✓ Paso 3 completado. Inconsistencias encontradas: {self.inconsistencias.shape[0]} registros")
+            return self.inconsistencias
+        except Exception as e:
+            print(f"✗ Error en Paso 3 (Auditoría): {e}")
+            traceback.print_exc()
+            raise
+
+    # ── Paso 4: Desviaciones ──
+    def paso_4_desviaciones(self, consumos: pl.DataFrame = None) -> pl.DataFrame:
+        """
+        Calcula desviaciones estadísticas (moda, media, std) sobre los consumos.
+
+        Args:
+            consumos: DataFrame de consumos. Si es None, usa self.consumos_facturacion.
+        """
+        print("\n" + "=" * 60)
+        print("PASO 4: ANÁLISIS DE DESVIACIONES")
+        print("=" * 60)
+        try:
+            datos = consumos if consumos is not None else self.consumos_facturacion
+            if datos is None:
+                raise ValueError("No hay datos de consumos. Ejecute paso_2_carga() primero.")
+
+            self.datos_desviaciones = desviaciones(datos)
+            print(f"✓ Paso 4 completado. Alertas de desviación: {self.datos_desviaciones.shape[0]} registros")
+            return self.datos_desviaciones
+        except Exception as e:
+            print(f"✗ Error en Paso 4 (Desviaciones): {e}")
+            traceback.print_exc()
+            raise
+
+    # ── Paso 5: Generación de informe ──
+    def paso_5_informe(self, consumos: pl.DataFrame = None, entradas: pl.DataFrame = None) -> tuple:
+        """
+        Genera el informe final de consumos netos (salidas - entradas).
+
+        Args:
+            consumos: DataFrame de salidas. Si es None, usa datos del pipeline.
+            entradas: DataFrame de entradas. Si es None, usa datos del pipeline.
+        """
+        print("\n" + "=" * 60)
+        print("PASO 5: GENERACIÓN DE INFORME FINAL")
+        print("=" * 60)
+        try:
+            datos_consumos = consumos if consumos is not None else self.consumos_facturacion
+            datos_entradas = entradas if entradas is not None else self.entradas
             
-#             val_fin = input(f"Ingrese Fecha Final (DD/MM/AAAA) [Presione Enter para {fecha_fin}]: ").strip()
-#             if val_fin:
-#                 fecha_fin = val_fin
-        
-#         except Exception:
-#             # En entornos no interactivos o si falla el input, usar valores por defecto
-#             pass
-#         print(f"Fechas seleccionadas: Inicio={fecha_inicio}, Fin={fecha_fin}\n")
-#     mes_Informe = fecha_inicio[3:5]
-#     return fecha_inicio, fecha_fin, mes_Informe
+            if datos_consumos is None or datos_entradas is None:
+                raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
+
+            self.resultados_informe = hacer_informe(datos_consumos, datos_entradas)
+            print(f"✓ Paso 5 completado. Informe generado con {len(self.resultados_informe)} componentes.")
+            return self.resultados_informe
+        except Exception as e:
+            print(f"✗ Error en Paso 5 (Informe): {e}")
+            traceback.print_exc()
+            raise
+
+    # ── Ejecución completa del pipeline ──
+    def ejecutar(self, saltar_descarga: bool = False, rutas_manuales: dict = None) -> dict:
+        """
+        Ejecuta los 5 pasos del pipeline secuencialmente.
+
+        Args:
+            saltar_descarga: Si True, omite el paso 1 y usa rutas_manuales o las del paso anterior.
+            rutas_manuales: dict con rutas de archivos para saltar la descarga.
+
+        Returns:
+            dict con los resultados de cada paso del pipeline.
+        """
+        print("\n" + "█" * 60)
+        print("  PIPELINE DE REPORTES DE CONSUMO - SaludIPS")
+        print(f"  Período: {self.fecha_inicio} → {self.fecha_fin}")
+        print("█" * 60)
+
+        resultados = {
+            'paso_1_descarga': None,
+            'paso_2_carga': None,
+            'paso_3_auditoria': None,
+            'paso_4_desviaciones': None,
+            'paso_5_informe': None,
+            'exitoso': False,
+        }
+
+        try:
+            # Paso 1: Descarga
+            if not saltar_descarga:
+                resultados['paso_1_descarga'] = self.paso_1_descarga()
+            else:
+                self.rutas_descargadas = rutas_manuales or {}
+                print("\n⏭  Paso 1 omitido (saltar_descarga=True)")
+
+            # Paso 2: Carga
+            resultados['paso_2_carga'] = self.paso_2_carga(rutas_manuales)
+
+            # Paso 3: Auditoría
+            resultados['paso_3_auditoria'] = self.paso_3_auditoria()
+
+            # Paso 4: Desviaciones
+            resultados['paso_4_desviaciones'] = self.paso_4_desviaciones()
+
+            # Paso 5: Informe
+            resultados['paso_5_informe'] = self.paso_5_informe()
+
+            resultados['exitoso'] = True
+            print("\n" + "█" * 60)
+            print("  ✓ PIPELINE COMPLETADO EXITOSAMENTE")
+            print("█" * 60)
+
+        except Exception as e:
+            print(f"\n✗ PIPELINE INTERRUMPIDO en: {e}")
+            traceback.print_exc()
+
+        return resultados
 
 
-# def ejecutar_navegacion_consumos(playwright: Playwright) -> None:
-#     fecha_inicio, fecha_fin, mes_Informe = obtener_fechas_usuario()
-
-#     browser = playwright.chromium.launch(headless=False, slow_mo=500)
-#     context = browser.new_context()
-#     page = context.new_page()
-
-#     try:
-#         page.goto("http://192.168.4.214/SaludIPS/Account/Login")
-#         page.get_by_role("textbox", name="Usuario").click()
-#         page.get_by_role("textbox", name="Usuario").fill("1085917679")
-#         page.get_by_role("textbox", name="Usuario").press("Tab")
-#         page.get_by_role("textbox", name="Password").fill("1087049780")
-#         page.get_by_role("button", name="Iniciar sesión").click()
-#         page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes ").click()
-#         page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes Almacén ").click()
-#         with page.expect_popup() as page1_info:
-#             page.locator("#ifrLeft").content_frame.get_by_role("link", name="Movimientos Inventario Detallado por Articulo").click()
-#         page1 = page1_info.value
-#         page1.wait_for_load_state("load")
-        
-#         # Esperar a que el selector esté listo y seleccionar la opción "2" (SALIDA)
-#         page1.wait_for_selector("[id=\"Tipo Movimiento-TipoEntradaSalida\"]")
-#         page1.locator("[id=\"Tipo Movimiento-TipoEntradaSalida\"]").select_option("2")
-#         # Forzar el evento de cambio por si select2 requiere actualización
-#         page1.evaluate('try { jQuery("[id=\'Tipo Movimiento-TipoEntradaSalida\']").trigger("change"); } catch(e) {}')
-        
-#         # Establecer las fechas mediante Vanilla JS para evitar que el Datepicker las borre/sobreescriba
-#         page1.evaluate(f'document.getElementById("Fecha Inicio-Fecha").value = "{fecha_inicio}"')
-#         page1.evaluate(f'document.getElementById("Fecha Final-Fecha").value = "{fecha_fin}"')
-        
-#         # Disparar eventos para actualizar cualquier widget o validación de formulario
-#         page1.evaluate('document.getElementById("Fecha Inicio-Fecha").dispatchEvent(new Event("change"))')
-#         page1.evaluate('document.getElementById("Fecha Final-Fecha").dispatchEvent(new Event("change"))')
-#         page1.evaluate('try { jQuery("[id=\'Fecha Inicio-Fecha\']").trigger("change"); } catch(e) {}')
-#         page1.evaluate('try { jQuery("[id=\'Fecha Final-Fecha\']").trigger("change"); } catch(e) {}')
-        
-#         # Ruta de descarga dinámica
-#         script_dir = os.path.dirname(os.path.abspath(__file__))
-#         dest_dir = os.path.join(script_dir, "reportes_consumos")
-#         os.makedirs(dest_dir, exist_ok=True)
-
-#         with page1.expect_download() as download_info:
-#             page1.get_by_role("button", name="Imprimir").click()
-#         download1 = download_info.value
-#         nombre_archivo1 = download1.suggested_filename
-#         _, extension = os.path.splitext(nombre_archivo1)
-#         nuevo_nombre1 = f"Informe consumos {mes_Informe} Salidas{extension}"
-#         download1.save_as(os.path.join(dest_dir, nuevo_nombre1))
-
-#         # Seleccionar la opción "1" (ENTRADA)
-#         page1.locator("[id=\"Tipo Movimiento-TipoEntradaSalida\"]").select_option("1")
-#         page1.evaluate('try { jQuery("[id=\'Tipo Movimiento-TipoEntradaSalida\']").trigger("change"); } catch(e) {}')
-        
-#         with page1.expect_download() as download_info2:
-#             page1.get_by_role("button", name="Imprimir").click()
-#         download2 = download_info2.value
-#         nombre_archivo2 = download2.suggested_filename
-#         _, extension = os.path.splitext(nombre_archivo2)
-#         nuevo_nombre2 = f"Informe consumos {mes_Informe} Entradas{extension}"
-#         download2.save_as(os.path.join(dest_dir, nuevo_nombre2))
-
-        # page.locator("#ifrLeft").content_frame.get_by_role("link", name="Reportes General").click()
-        # page.locator("#ifrLeft").content_frame.locator("#select2-Modulo-container").click()
-        # page.locator("#ifrLeft").content_frame.get_by_role("treeitem", name="CONTABILIDAD").click()
-        # page.locator("#ifrLeft").content_frame.get_by_role("button", name="Ver Reportes").click()
-        # page.locator("#ifrLeft").content_frame.get_by_role("cell", name="AUDITORIACONTABLE").click()
-        # with page.expect_popup() as page1_info:
-        #     page.locator("#ifrLeft").content_frame.get_by_role("link", description="Generar Reporte", exact=True).click()
-        # page1 = page1_info.value
-        # TODO: COLOCAR FECHAS COMO EN LA AUTOMATIZACION ANTERIOR
-        # page1.locator("[id=\"Fecha Inicio-Fecha\"]").click()
-        # page1.locator("input[type=\"search\"]").fill("6135")
-        # page1.get_by_role("treeitem", name="6135 - UNIDAD FUNCIONAL DE").click()
-        # with page1.expect_download() as download_info:
-        #     page1.get_by_role("button", name="Imprimir").click()
-        #TODO: HACER FUNCIONAL EL GUARDAR COMO REPORTE SEGUN EL SIGUIENTE CODIGO
-        #with page1.expect_download() as download_info:
-#             page1.get_by_role("button", name="Imprimir").click()
-#         download1 = download_info.value
-#         nombre_archivo1 = download1.suggested_filename
-#         _, extension = os.path.splitext(nombre_archivo1)
-#         nuevo_nombre1 = f"Informe consumos {mes_Informe} Salidas{extension}"
-#         download1.save_as(os.path.join(dest_dir, nuevo_nombre1))
-
-#         # ---------------------
-#         context.close()
-#         browser.close()
-
-
-
-#     except Exception as error:
-#         print(f"Error general: {error}")
-
-
-# with sync_playwright() as playwright:
-#     ejecutar_navegacion_consumos(playwright)
+# ══════════════════════════════════════════════
+# FUNCIONES UTILITARIAS (preservadas del código original)
+# ══════════════════════════════════════════════
 
 def leer_informes_consumos():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    dest_dir = os.path.join(script_dir, "reportes_consumos")
-    #TODO: hacer que el informe sea mas dinamico cambiando el 04 por el mes que el usuario da al inicio
+    """Lee los archivos de salidas y entradas directamente desde la ruta en D:."""
+    fecha_inicio, fecha_fin, mes_Informe = obtener_fechas_usuario()
+    dest_dir = Path(r"D:\proyectos\Reportes_saludips\consumos") / mes_Informe
     #TODO: Traer los documentos que tocaron costo segun el otro informe
-    salidas = pl.read_excel(os.path.join(dest_dir, "Informe consumos 04 Salidas.xlsx"), read_options={"skip_rows":6, "header_row": None})    
-    entradas = pl.read_excel(os.path.join(dest_dir, "Informe consumos mes de 04 Entradas.xlsx"), read_options={"skip_rows":6, "header_row": None}
-    )
+    salidas = pl.read_excel(str(dest_dir / f"Informe consumos {mes_Informe} Salidas.xlsx"), read_options={"skip_rows":6, "header_row": None})    
+    entradas = pl.read_excel(str(dest_dir / f"Informe consumos mes de {mes_Informe} Entradas.xlsx"), read_options={"skip_rows":6, "header_row": None})
     nombres_columnas = ['Comprobante','Numero','Fecha','NoDocumento','Proveedor','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','CodArticulo','Articulo','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','Unidad','LaboratorioMarca','Observacion','Usuario','User','FechaDigitacion']
     
     #colocamos la primera fila como nombre de columnas
@@ -283,8 +393,6 @@ def alistamiento_para_informes(entradas_para_procesar, salidas_para_procesar):
     except Exception as error:
         print(f"Error general: {error}")
 
-salidas_sin_procesar, entradas_sin_procesar = leer_informes_consumos()
-alistamiento_para_informes(entradas_sin_procesar, salidas_sin_procesar)
 
 def encontrar_inconsistencias(entradas_para_procesar, salidas_para_procesar):
     try:
@@ -294,3 +402,23 @@ def encontrar_inconsistencias(entradas_para_procesar, salidas_para_procesar):
         
     except Exception as error:
         print(f"Error general: {error}")
+
+
+# ══════════════════════════════════════════════
+# PUNTO DE ENTRADA
+# ══════════════════════════════════════════════
+
+if __name__ == "__main__":
+    # Modo pipeline completo
+    if "--pipeline" in sys.argv:
+        fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
+        pipeline = ConsumoPipeline(fecha_inicio, fecha_fin)
+        
+        # Si se pasa --sin-descarga, omite el paso 1
+        saltar = "--sin-descarga" in sys.argv
+        resultados = pipeline.ejecutar(saltar_descarga=saltar)
+
+    else:
+        # Modo legacy: ejecutar solo lectura + alistamiento
+        salidas_sin_procesar, entradas_sin_procesar = leer_informes_consumos()
+        alistamiento_para_informes(entradas_sin_procesar, salidas_sin_procesar)
