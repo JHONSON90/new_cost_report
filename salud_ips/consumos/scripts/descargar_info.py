@@ -82,6 +82,8 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
         context = browser.new_context()
+        context.set_default_timeout(600000)
+        context.set_default_navigation_timeout(600000)
         page = context.new_page()
         try:
             # ── Login ──
@@ -104,7 +106,7 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             page.evaluate('try { jQuery("[id=\'Fecha Inicio-Fecha\']").trigger("change"); } catch(e) {}')         
             page.evaluate('try { jQuery("[id=\'Fecha Final-Fecha\']").trigger("change"); } catch(e) {}')
 
-            with page.expect_download() as download_info:
+            with page.expect_download(timeout=600000) as download_info:
                 page.get_by_role("button", name="Imprimir").click()
             download1 = download_info.value
             nombre_archivo1 = download1.suggested_filename
@@ -116,30 +118,24 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             print(f"  ✓ Facturación descargada: {ruta_facturacion.name}")
 
             # ── Navegación a Almacén → Reportes ──
-            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Almacén ").click()
-            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes ").click()
-            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes Almacén ").click()
-            with page.expect_popup() as page2_info:
-                page.locator("#ifrLeft").content_frame.get_by_role("link", name="Movimientos Inventario Detallado por Articulo").click()
             page.goto("http://192.168.4.214/SaludIPS/Home/HC")
-            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Almacén ").click()
-            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes ").click()
-            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes Almacén ").click()
+            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Almacén ").click()
+            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Almacén ").click()
+            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes ").click()
+            page.locator("#ifrLeft").content_frame.get_by_role("link", name=" Reportes Almacén ").click()
             with page.expect_popup() as page1_info:
                 page.locator("#ifrLeft").content_frame.get_by_role("link", name="Movimientos Inventario Detallado por Articulo").click()
             page1 = page1_info.value
             page1.wait_for_load_state("load")
-            
-            # Esperar a que el selector esté listo y seleccionar la opción "2" (SALIDA)
-            page1.wait_for_selector("[id=\"Tipo Movimiento-TipoEntradaSalida\"]")
             page1.locator("[id=\"Tipo Movimiento-TipoEntradaSalida\"]").select_option("2")
+
             # Forzar el evento de cambio por si select2 requiere actualización
             page1.evaluate('try { jQuery("[id=\'Tipo Movimiento-TipoEntradaSalida\']").trigger("change"); } catch(e) {}')
-            
+ 
             # Establecer las fechas mediante Vanilla JS para evitar que el Datepicker las borre/sobreescriba
             page1.evaluate(f'document.getElementById("Fecha Inicio-Fecha").value = "{fecha_inicio}"')
             page1.evaluate(f'document.getElementById("Fecha Final-Fecha").value = "{fecha_fin}"')
-            
+ 
             # Disparar eventos para actualizar cualquier widget o validación de formulario
             page1.evaluate('document.getElementById("Fecha Inicio-Fecha").dispatchEvent(new Event("change"))')
             page1.evaluate('document.getElementById("Fecha Final-Fecha").dispatchEvent(new Event("change"))')
@@ -147,7 +143,7 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             page1.evaluate('try { jQuery("[id=\'Fecha Final-Fecha\']").trigger("change"); } catch(e) {}')
 
             # ── Descarga 2: Salidas de consumo ──
-            with page1.expect_download() as download_info:
+            with page1.expect_download(timeout=600000) as download_info:
                 page1.get_by_role("button", name="Imprimir").click()
             download2 = download_info.value
             nombre_archivo2 = download2.suggested_filename
@@ -162,7 +158,7 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             page1.get_by_title("SALIDA").click()
             page1.get_by_role("treeitem", name="ENTRADA").click()
 
-            with page1.expect_download() as download_info:
+            with page1.expect_download(timeout=600000) as download_info:
                 page1.get_by_role("button", name="Imprimir").click()
             download3 = download_info.value
             nombre_archivo3 = download3.suggested_filename
@@ -187,13 +183,13 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
     return rutas_generadas
 
 
-def run(playwright: Playwright) -> dict:
-    """Función legacy para compatibilidad. Usa obtener_fechas_usuario() para las fechas."""
-    fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
-    return ejecutar_descarga(fecha_inicio, fecha_fin)
+# def run(playwright: Playwright) -> dict:
+#     """Función legacy para compatibilidad. Usa obtener_fechas_usuario() para las fechas."""
+#     fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
+#     return ejecutar_descarga(fecha_inicio, fecha_fin)
 
 
-if __name__ == "__main__":
-    fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
-    rutas = ejecutar_descarga(fecha_inicio, fecha_fin)
-    print(f"\nRutas generadas: {rutas}")
+# if __name__ == "__main__":
+#     fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
+#     rutas = ejecutar_descarga(fecha_inicio, fecha_fin)
+#     print(f"\nRutas generadas: {rutas}")

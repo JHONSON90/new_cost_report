@@ -24,12 +24,14 @@ def cargar_datos(rutas: dict = None):
             ruta_entradas = Path(rutas['entradas'])
             # El listado de productos se mantiene como ruta fija por ahora
             ruta_listado_productos = Path(r"C:\Users\COSTOS\Downloads\LISTADO_INVENTARIO-20260618_082554.xlsx")
+            print("Nuevas rutas")
         else:
             # Rutas legacy hardcodeadas (fallback)
             ruta_facturacion = Path(r"C:\Users\COSTOS\Downloads\RELACION__DE_FACTURAS_POR_USUARIO_DETALLADO-20260624_023844.xlsx")
             ruta_consumos = Path(r"C:\Users\COSTOS\Downloads\MOVIMIENTOS_INVENTARIO_DETALLADO_POR_ARTICULO-20260618_080915.xlsx")
             ruta_listado_productos = Path(r"C:\Users\COSTOS\Downloads\LISTADO_INVENTARIO-20260618_082554.xlsx")
             ruta_entradas = Path(r"C:\Users\COSTOS\Downloads\MOVIMIENTOS_INVENTARIO_DETALLADO_POR_ARTICULO-20260703_095603.xlsx")
+            print("Rutas legacy")
 
         # Validar existencia de archivos
         for nombre, ruta in [("Facturación", ruta_facturacion), ("Consumos/Salidas", ruta_consumos), 
@@ -52,7 +54,10 @@ def cargar_datos(rutas: dict = None):
         print(f"Error en cargar_datos: {e}")
         raise
 
+    consumos_lectura = consumos.clone()
+
     #def procesar_datos():
+    #TODO: UNIFICAR POR CODIGO DE PRODUCTO LA CANTIDAD DEL CONSUMO O -"Cantidad"
 
     #region LISTADO DE PRODUCTOS
     listado_productos = listado_productos.select(["Codigo",'Nombre','CodigoGenerico','EstadoArticulo'])
@@ -125,6 +130,7 @@ def cargar_datos(rutas: dict = None):
         pl.col("cantidad").cast(pl.Int64),
         pl.col("CantidadSolicitada").cast(pl.Int64)
     )
+    print("✓ Lectura de archivos completada con exito!!")
 
     #region Limpieza
     #['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'CodGrupo', 'Grupo', 'CodArticulo', 'Articulo', 'Cantidad', 'ValorUnitario', 'TotalBruto', 'ValorIVA', 'ValorDescuento', 'ValorTotal', 'Unidad', 'LaboratorioMarca', 'Observacion', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Nombre', 'CodigoGenerico', 'EstadoArticulo', 'ADM-CodGen', 'idadmision', 'nofactura', 'idusuario', 'nomtiposervicio', 'codigo', 'nombre', 'cantidad', 'CantidadSolicitada', 'vrunitario', 'vrtotal', 'Especialidad', 'MedicoRealiza', 'MedicoOrdena', '# Identificacion']
@@ -160,7 +166,7 @@ def cargar_datos(rutas: dict = None):
         pl.col('ValorTotal').sum().cast(pl.Int64)
     )
 
-
+    print("✓ Limpieza de archivos completada con exito!!")
     #print(f"\n\nConsumos de facturación:\n{consumos_de_facturacion}")
 
-    return consumos_facturacion, facturacion_productos, entradas, listado_productos
+    return consumos_de_facturacion, facturacion_productos, entradas, listado_productos, anulados_limpieza, limpieza_consumos_facturacion, consumos_lectura

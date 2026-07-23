@@ -11,8 +11,10 @@ from pathlib import Path
 import re
 import sys
 import traceback
+import xlsxwriter
 
 import polars as pl
+import pandas as pd
 
 # ──────────────────────────────────────────────
 # Imports de los módulos del pipeline
@@ -22,6 +24,7 @@ from scripts.lectura_proceso import cargar_datos
 from scripts.revision_informes import revisiones
 from scripts.desviaciones import desviaciones
 from scripts.informe_consumo import hacer_informe
+from scripts.rentabilidad import realizar_rentabilidad
 
 
 # ══════════════════════════════════════════════
@@ -54,6 +57,7 @@ class ConsumoPipeline:
 
         # Resultados intermedios de cada paso
         self.rutas_descargadas: dict = {}
+        self.ruta_informes = None
         self.consumos_facturacion = None
         self.facturacion_productos = None
         self.entradas = None
@@ -61,6 +65,51 @@ class ConsumoPipeline:
         self.inconsistencias = None
         self.datos_desviaciones = None
         self.resultados_informe = None
+        self.rentabilidad = None
+
+    def _crear_carpeta_informes(self, rutas=None) -> Path:
+        """
+        Crea la carpeta 'informes' en la misma carpeta donde están los archivos descargados.
+        """
+        rutas = rutas or self.rutas_descargadas
+
+        if not rutas:
+            raise ValueError("No hay rutas disponibles para crear la carpeta de informes.")
+
+        # Si rutas es dict, tomamos sus valores
+        valores = rutas.values() if isinstance(rutas, dict) else rutas
+
+        # Tomamos la primera ruta válida
+        ruta_referencia = next((Path(r) for r in valores if r), None)
+
+        if ruta_referencia is None:
+            raise ValueError("No se encontró ninguna ruta válida.")
+
+        # Si la ruta es un archivo, usamos su carpeta padre
+        carpeta_base = ruta_referencia if ruta_referencia.is_dir() else ruta_referencia.parent
+
+        # Creamos carpeta informes
+        ruta_informes = carpeta_base / "informes"
+        ruta_informes.mkdir(parents=True, exist_ok=True)
+
+        return ruta_informes
+
+
+    def _texto_archivo_seguro(self, texto: str) -> str:
+        """
+        Limpia texto para usarlo como nombre de archivo.
+        Evita problemas con /, \\, :, *, ?, etc.
+        """
+        return re.sub(r'[<>:"/\\|?*]+', "-", str(texto))
+
+
+    def _rango_fechas_archivo(self) -> str:
+        """
+        Devuelve las fechas en formato seguro para nombre de archivo.
+        """
+        inicio = self._texto_archivo_seguro(self.fecha_inicio)
+        fin = self._texto_archivo_seguro(self.fecha_fin)
+        return f"{inicio}_{fin}"
 
     # ── Paso 1: Descarga ──
     def paso_1_descarga(self) -> dict:
@@ -92,49 +141,66 @@ class ConsumoPipeline:
             rutas_a_usar = rutas or self.rutas_descargadas
             if not rutas_a_usar:
                 raise ValueError("No hay rutas disponibles. Ejecute paso_1_descarga() primero o proporcione rutas.")
+            self.ruta_informes = self._crear_carpeta_informes(rutas_a_usar)
 
-            (self.consumos_facturacion,
+            (self.consumos_de_facturacion,
              self.facturacion_productos,
              self.entradas,
-             self.listado_productos) = cargar_datos(rutas_a_usar)
+             self.listado_productos, 
+             self.anulados_limpieza, 
+             self.limpieza_consumos_facturacion, 
+             self.consumos_lectura) = cargar_datos(rutas_a_usar)
 
             print(f"✓ Paso 2 completado.")
-            print(f"  - consumos_facturacion: {self.consumos_facturacion.shape}")
+            print(f"  - consumos_facturacion: {self.consumos_de_facturacion.shape}")
             print(f"  - facturacion_productos: {self.facturacion_productos.shape}")
             print(f"  - entradas: {self.entradas.shape}")
-            return (self.consumos_facturacion, self.facturacion_productos, 
-                    self.entradas, self.listado_productos)
+            print(f"  - Columnas consumos_facturacion: {self.consumos_de_facturacion.columns}")
+            print(f"  - limpieza_consumos_facturacion: {self.limpieza_consumos_facturacion.shape}")
+            #print(f"  - Columnas limpieza_consumos_facturacion: {self.limpieza_consumos_facturacion.columns}")
+            print(f"  - consumos: {self.consumos_lectura.shape}")
+            
+
+            return (self.consumos_de_facturacion, self.facturacion_productos, 
+                    self.entradas, self.listado_productos, self.anulados_limpieza, self.limpieza_consumos_facturacion, self.consumos_lectura)
         except Exception as e:
             print(f"✗ Error en Paso 2 (Carga): {e}")
             traceback.print_exc()
             raise
 
     # ── Paso 3: Auditoría ──
-    def paso_3_auditoria(self, consumos_facturados: pl.DataFrame = None) -> pl.DataFrame:
+    def paso_3_auditoria(self, limpieza_consumos_facturacion: pl.DataFrame = None) -> pl.DataFrame:
         """
         Ejecuta revisiones de consistencia sobre los consumos facturados.
 
         Args:
-            consumos_facturados: DataFrame de consumos. Si es None, usa self.consumos_facturacion.
+            limpieza_consumos_facturacion: DataFrame de consumos. Si es None, usa self.limpieza_consumos_facturacion.
         """
         print("\n" + "=" * 60)
         print("PASO 3: AUDITORÍA DE INCONSISTENCIAS")
         print("=" * 60)
         try:
-            datos = consumos_facturados if consumos_facturados is not None else self.consumos_facturacion
+            datos = limpieza_consumos_facturacion if limpieza_consumos_facturacion is not None else self.limpieza_consumos_facturacion
             if datos is None:
                 raise ValueError("No hay datos de consumos. Ejecute paso_2_carga() primero.")
 
             self.inconsistencias = revisiones(datos)
             print(f"✓ Paso 3 completado. Inconsistencias encontradas: {self.inconsistencias.shape[0]} registros")
+
+            ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
+            nombre_archivo = f"inconsistencias_{self._rango_fechas_archivo()}.xlsx"
+            ruta_salida = ruta_informes / nombre_archivo
+
+            self.inconsistencias.write_excel(str(ruta_salida))
+            print(f"✓ Paso 3 completado. Inconsistencias guardadas en: {ruta_salida}")
             return self.inconsistencias
         except Exception as e:
             print(f"✗ Error en Paso 3 (Auditoría): {e}")
             traceback.print_exc()
             raise
-
+        
     # ── Paso 4: Desviaciones ──
-    def paso_4_desviaciones(self, consumos: pl.DataFrame = None) -> pl.DataFrame:
+    def paso_4_desviaciones(self, consumos_lectura: pl.DataFrame = None) -> pl.DataFrame:
         """
         Calcula desviaciones estadísticas (moda, media, std) sobre los consumos.
 
@@ -145,11 +211,16 @@ class ConsumoPipeline:
         print("PASO 4: ANÁLISIS DE DESVIACIONES")
         print("=" * 60)
         try:
-            datos = consumos if consumos is not None else self.consumos_facturacion
+            datos = consumos_lectura if consumos_lectura is not None else self.consumos_lectura
             if datos is None:
                 raise ValueError("No hay datos de consumos. Ejecute paso_2_carga() primero.")
 
             self.datos_desviaciones = desviaciones(datos)
+            ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
+            nombre_archivo = f"desviaciones_{self._rango_fechas_archivo()}.xlsx"
+            ruta_salida = ruta_informes / nombre_archivo
+
+            self.datos_desviaciones.write_excel(str(ruta_salida))
             print(f"✓ Paso 4 completado. Alertas de desviación: {self.datos_desviaciones.shape[0]} registros")
             return self.datos_desviaciones
         except Exception as e:
@@ -158,31 +229,73 @@ class ConsumoPipeline:
             raise
 
     # ── Paso 5: Generación de informe ──
-    def paso_5_informe(self, consumos: pl.DataFrame = None, entradas: pl.DataFrame = None) -> tuple:
+    def paso_5_informe(self, consumos_lectura: pl.DataFrame = None, entradas: pl.DataFrame = None) -> tuple:
         """
         Genera el informe final de consumos netos (salidas - entradas).
 
         Args:
             consumos: DataFrame de salidas. Si es None, usa datos del pipeline.
             entradas: DataFrame de entradas. Si es None, usa datos del pipeline.
+
         """
         print("\n" + "=" * 60)
         print("PASO 5: GENERACIÓN DE INFORME FINAL")
         print("=" * 60)
         try:
-            datos_consumos = consumos if consumos is not None else self.consumos_facturacion
+            datos_consumos = consumos_lectura if consumos_lectura is not None else self.consumos_lectura
             datos_entradas = entradas if entradas is not None else self.entradas
             
             if datos_consumos is None or datos_entradas is None:
                 raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
 
             self.resultados_informe = hacer_informe(datos_consumos, datos_entradas)
+            
+            ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
+            nombre_archivo = f"informe_{self._rango_fechas_archivo()}.xlsx"
+            ruta_salida = ruta_informes / nombre_archivo
+
+            if isinstance(self.resultados_informe, dict):
+                with pd.ExcelWriter(str(ruta_salida), engine='xlsxwriter') as writer:
+                    for nombre_sheet, df_sheet in self.resultados_informe.items():
+
+                        df_sheet.to_pandas().to_excel(writer, sheet_name=nombre_sheet[:31], index=False)
+                        print(f"✓ Paso 5 completado. Guardado en: {ruta_salida}")
+                        print(f"  - Hojas: {list(self.resultados_informe.keys())}")
+            else:
+                self.resultados_informe.to_pandas().to_excel(str(ruta_salida), index=False)
             print(f"✓ Paso 5 completado. Informe generado con {len(self.resultados_informe)} componentes.")
             return self.resultados_informe
         except Exception as e:
             print(f"✗ Error en Paso 5 (Informe): {e}")
             traceback.print_exc()
             raise
+
+    def informe_rentabilidad(self, limpieza_consumos_facturacion: pl.DataFrame = None) -> pl.DataFrame:
+        print("\n" + "=" * 60)
+        print("PASO 6: GENERACIÓN DE INFORME DE RENTABILIDAD")
+        print("=" * 60)
+        try:
+            datos_limpios = limpieza_consumos_facturacion if limpieza_consumos_facturacion is not None else self.limpieza_consumos_facturacion
+            
+            if datos_limpios is None:
+                raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
+
+            self.rentabilidad = realizar_rentabilidad(datos_limpios)
+            
+            ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
+            nombre_archivo = f"informe_rentabilidad_{self._rango_fechas_archivo()}.xlsx"
+            
+            ruta_salida = ruta_informes / nombre_archivo
+
+            self.rentabilidad.write_excel(str(ruta_salida))
+            print(f"✓ Paso 6 completado. Informe de rentabilidad guardado en: {ruta_salida}")
+            return self.rentabilidad
+        except Exception as e:
+            print(f"✗ Error en Paso 6 (Informe): {e}")
+            traceback.print_exc()
+            raise
+
+        
 
     # ── Ejecución completa del pipeline ──
     def ejecutar(self, saltar_descarga: bool = False, rutas_manuales: dict = None) -> dict:
@@ -207,6 +320,7 @@ class ConsumoPipeline:
             'paso_3_auditoria': None,
             'paso_4_desviaciones': None,
             'paso_5_informe': None,
+            'paso_6_rentabilidad': None,
             'exitoso': False,
         }
 
@@ -230,6 +344,9 @@ class ConsumoPipeline:
             # Paso 5: Informe
             resultados['paso_5_informe'] = self.paso_5_informe()
 
+            # Paso 6: Informe de rentabilidad
+            resultados['paso_6_rentabilidad'] = self.informe_rentabilidad()
+
             resultados['exitoso'] = True
             print("\n" + "█" * 60)
             print("  ✓ PIPELINE COMPLETADO EXITOSAMENTE")
@@ -241,184 +358,33 @@ class ConsumoPipeline:
 
         return resultados
 
-
-# ══════════════════════════════════════════════
-# FUNCIONES UTILITARIAS (preservadas del código original)
-# ══════════════════════════════════════════════
-
-def leer_informes_consumos():
-    """Lee los archivos de salidas y entradas directamente desde la ruta en D:."""
-    fecha_inicio, fecha_fin, mes_Informe = obtener_fechas_usuario()
-    dest_dir = Path(r"D:\proyectos\Reportes_saludips\consumos") / mes_Informe
-    #TODO: Traer los documentos que tocaron costo segun el otro informe
-    salidas = pl.read_excel(str(dest_dir / f"Informe consumos {mes_Informe} Salidas.xlsx"), read_options={"skip_rows":6, "header_row": None})    
-    entradas = pl.read_excel(str(dest_dir / f"Informe consumos mes de {mes_Informe} Entradas.xlsx"), read_options={"skip_rows":6, "header_row": None})
-    nombres_columnas = ['Comprobante','Numero','Fecha','NoDocumento','Proveedor','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','CodArticulo','Articulo','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','Unidad','LaboratorioMarca','Observacion','Usuario','User','FechaDigitacion']
-    
-    #colocamos la primera fila como nombre de columnas
-    mapeo_columnas_salidas = dict(zip(salidas.columns, nombres_columnas))
-    mapeo_columnas_entradas = dict(zip(entradas.columns, nombres_columnas))
-
-    # 3. Procesar usando encadenamiento de métodos (Método idóneo en Polars)
-    salidas = (
-        salidas
-        .slice(1) # Extrae desde la fila 1 en adelante (elimina la fila 0 de forma segura)
-        .rename(mapeo_columnas_salidas) # Renombra de manera inmutable
-    )
-    
-    entradas = (
-        entradas
-        .slice(1) 
-        .rename(mapeo_columnas_entradas)
-    )
-    #print(salidas.head(10))
-    #print(entradas.head(10))
-
-
-    salidas = salidas.filter(
-        pl.col("Comprobante").is_in([
-            "SALIDAS INTERNAS ALMACEN", 
-            "SALIDAS INTERNAS FARMACIA", 
-            "SISTEMA DISPENSACION FARMACIA",
-            ])
-    ).with_columns(
-        pl.col("Cantidad").cast(pl.Float64).alias("Cantidad"), 
-        pl.col("ValorUnitario").cast(pl.Float64).alias("ValorUnitario"),
-        pl.col("ValorTotal").cast(pl.Float64).alias("ValorTotal")
-    ).with_columns(
-        Municipio = pl.col("CentroCosto").str.slice(0, 3),
-            Servicio = pl.col("CentroCosto")
-                        .str.slice(3)
-                        .str.split("-")
-                        .list.get(0)
-                        .str.strip_chars(),
-            Tipo_servicio = pl.col("CentroCosto")
-                        .str.split("-")
-                        .list.get(1)
-                        .str.strip_chars(), 
-            Linea_inventario = pl.when(pl.col('CodGrupo').str.starts_with('1'))
-                        .then(pl.lit('Medicamentos'))
-                        .when(pl.col('CodGrupo').str.starts_with('2'))
-                        .then(pl.lit('Dispositivos'))
-                        .otherwise(pl.lit('Suministros'))
-    )
-
-    entradas = entradas.filter(
-        pl.col("Comprobante").is_in([
-            'SISTEMA ANULACION DISPENSACION FARMACIA',
-            'SISTEMA DEVOLUCION FARMACIA',
-            "ENTRADAS INTERNAS FARMACIA",
-            'ENTRADAS INTERNAS SIMA'
-            ])
-    ).with_columns(
-        pl.col("Cantidad").cast(pl.Float64).alias("Cantidad"), 
-        pl.col("ValorUnitario").cast(pl.Float64).alias("ValorUnitario"),
-        pl.col("ValorTotal").cast(pl.Float64).alias("ValorTotal")
-    ).with_columns(
-        Municipio = pl.col("CentroCosto").str.slice(0, 3),
-            Servicio = pl.col("CentroCosto")
-                        .str.slice(3)
-                        .str.split("-")
-                        .list.get(0)
-                        .str.strip_chars(),
-            Tipo_servicio = pl.col("CentroCosto")
-                        .str.split("-")
-                        .list.get(1)
-                        .str.strip_chars(), 
-            Linea_inventario = pl.when(pl.col('CodGrupo').str.starts_with('1'))
-                        .then(pl.lit('Medicamentos'))
-                        .when(pl.col('CodGrupo').str.starts_with('2'))
-                        .then(pl.lit('Dispositivos'))
-                        .otherwise(pl.lit('Suministros'))
-    )
-
-    #print(f"Columnas salidas: {salidas.columns}, Columnas entradas: {entradas.columns}")  
-
-
-    return salidas, entradas
-
-#TODO: Revisar como se anularian las dispensaciones y mirar si se vuelven a facturar o no.
-#TODO: Cambiar la estructura del archivo(uno la generacion, otro archivo lectura y alistamiento y otro generacion del informe, otro para sacar inconsistencias y unirlos todos en pipeline)
-
-
-def alistamiento_para_informes(entradas_para_procesar, salidas_para_procesar):
-    try:
-        consumos_por_mpios_medicamentos = salidas_para_procesar.filter(
-            pl.col("Municipio") != "Pas",
-            pl.col("Linea_inventario") == "Medicamentos"
-        ).group_by("Municipio").agg(
-            pl.col("ValorTotal").sum().cast(pl.Int64).alias("valor_total")
-        )
-
-        consumos_por_servicio_medicamentos = salidas_para_procesar.filter(
-            pl.col("Municipio") == "Pas",
-            pl.col("Linea_inventario") == "Medicamentos"
-        ).group_by("Servicio").agg(
-            pl.col("ValorTotal").sum().cast(pl.Int64).alias("valor_total")
-        )
-
-        entradas_por_mpios_medicamentos = entradas_para_procesar.filter(
-            pl.col("Municipio") != "Pas",
-            pl.col("Linea_inventario") == "Medicamentos"
-            
-        ).group_by("Municipio").agg(
-            pl.col("ValorTotal").sum().cast(pl.Int64).alias("valor_total")
-        )
-
-        entradas_por_servicio_medicamentos = entradas_para_procesar.filter(
-            pl.col("Municipio") == "Pas",
-            pl.col("Linea_inventario") == "Medicamentos"
-        ).group_by("Servicio").agg(
-            pl.col("ValorTotal").sum().cast(pl.Int64).alias("valor_total")
-        )
-
-        print("*"*50)
-        print("CONSUMOS POR MUNICIPIO")
-        print("*"*50)
-        print(consumos_por_mpios_medicamentos)
-        print("*"*50)
-        print("CONSUMOS POR SERVICIO")
-        print("*"*50)
-        print(consumos_por_servicio_medicamentos)
-        print("*"*50)
-        print("ENTRADAS POR MUNICIPIO")
-        print("*"*50)
-
-        print(entradas_por_mpios_medicamentos)
-        print("*"*50)
-        print("ENTRADAS POR SERVICIO")
-        print("*"*50)
-        print(entradas_por_servicio_medicamentos)
-        print("*"*50)
-    except Exception as error:
-        print(f"Error general: {error}")
-
-
-def encontrar_inconsistencias(entradas_para_procesar, salidas_para_procesar):
-    try:
-        salidas_para_procesar = salidas_para_procesar.filter(
-            
-        )
-        
-    except Exception as error:
-        print(f"Error general: {error}")
-
-
 # ══════════════════════════════════════════════
 # PUNTO DE ENTRADA
 # ══════════════════════════════════════════════
 
 if __name__ == "__main__":
     # Modo pipeline completo
-    if "--pipeline" in sys.argv:
-        fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
-        pipeline = ConsumoPipeline(fecha_inicio, fecha_fin)
+    # if "--pipeline" in sys.argv:
+    #     fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
+    #     pipeline = ConsumoPipeline(fecha_inicio, fecha_fin)
         
-        # Si se pasa --sin-descarga, omite el paso 1
-        saltar = "--sin-descarga" in sys.argv
-        resultados = pipeline.ejecutar(saltar_descarga=saltar)
+    #     # Si se pasa --sin-descarga, omite el paso 1
+    #     saltar = "--sin-descarga" in sys.argv
+    #     resultados = pipeline.ejecutar(saltar_descarga=saltar)
 
-    else:
+    # else:
+    #     # Modo legacy: ejecutar solo lectura + alistamiento
+    #     salidas_sin_procesar, entradas_sin_procesar = leer_informes_consumos()
+    #     alistamiento_para_informes(entradas_sin_procesar, salidas_sin_procesar)
+
+    if "--legacy" in sys.argv:
         # Modo legacy: ejecutar solo lectura + alistamiento
         salidas_sin_procesar, entradas_sin_procesar = leer_informes_consumos()
         alistamiento_para_informes(entradas_sin_procesar, salidas_sin_procesar)
+    else:
+        fecha_inicio, fecha_fin, _ = obtener_fechas_usuario()
+        pipeline = ConsumoPipeline(fecha_inicio, fecha_fin)
+ 
+        # Si se pasa --sin-descarga, omite el paso 1
+        saltar = "--sin-descarga" in sys.argv
+        resultados = pipeline.ejecutar(saltar_descarga=saltar)

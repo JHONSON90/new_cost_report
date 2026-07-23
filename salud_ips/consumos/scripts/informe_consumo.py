@@ -203,23 +203,40 @@ def hacer_informe(consumos, entradas):
 
     facturacion_medicamentos_sin_devolucion = facturacion_medicamentos_sin_devolucion.with_columns(
         (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).select(['Municipio', 'ValorNeto'])
+    ).group_by('Municipio').agg(pl.col('ValorNeto').sum()).with_columns(
+        pl.lit("servicio farmaceutico").alias("Servicio")
+    ).select(['Municipio', 'Servicio', 'ValorNeto'])
 
     facturacion_dispositivos_sin_devolucion = facturacion_dispositivos_sin_devolucion.with_columns(
         (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).select(['Municipio', 'ValorNeto'])
+    ).group_by('Municipio').agg(pl.col('ValorNeto').sum()).with_columns(
+        pl.lit("servicio farmaceutico").alias("Servicio")
+    ).select(['Municipio', 'Servicio', 'ValorNeto'])
 
     facturacion_suministros_sin_devolucion = facturacion_suministros_sin_devolucion.with_columns(
         (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).select(['Municipio', 'ValorNeto'])
+    ).group_by('Municipio').agg(pl.col('ValorNeto').sum()).with_columns(
+        pl.lit("servicio farmaceutico").alias("Servicio")
+    ).select(['Municipio', 'Servicio', 'ValorNeto'])
 
-    print("medicamentos: ",consumos_medicamentos_sin_entradas)
-    print("dispositivos: ",consumos_dispositivos_sin_entradas)
-    print("suministros: ",consumos_suministros_sin_entradas)
-    print("facturacion_medicamentos: ",facturacion_medicamentos_sin_devolucion)
-    print("facturacion_dispositivos: ",facturacion_dispositivos_sin_devolucion)
-    print("facturacion_suministros: ",facturacion_suministros_sin_devolucion)
+    #union facturacion con consumos
+    medicamentos_completo = pl.concat([
+        consumos_medicamentos_sin_entradas,
+        facturacion_medicamentos_sin_devolucion
+    ]).group_by(['Municipio', 'Servicio']).agg(pl.col('ValorNeto').sum()).sort(['Municipio', 'Servicio'])
 
+    dispositivos_completo = pl.concat([
+        consumos_dispositivos_sin_entradas,
+        facturacion_dispositivos_sin_devolucion
+    ]).group_by(['Municipio', 'Servicio']).agg(pl.col('ValorNeto').sum()).sort(['Municipio', 'Servicio'])
 
+    suministros_completo = pl.concat([
+        consumos_suministros_sin_entradas,
+        facturacion_suministros_sin_devolucion
+    ]).group_by(['Municipio', 'Servicio']).agg(pl.col('ValorNeto').sum()).sort(['Municipio', 'Servicio'])
 
-    return consumos_medicamentos_sin_entradas, consumos_dispositivos_sin_entradas, consumos_suministros_sin_entradas, facturacion_medicamentos_sin_devolucion, facturacion_dispositivos_sin_devolucion, facturacion_suministros_sin_devolucion
+    return {
+        'consumos_medicamentos': medicamentos_completo,
+        'consumos_dispositivos': dispositivos_completo,
+        'consumos_suministros': suministros_completo
+        }
