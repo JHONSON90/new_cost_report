@@ -13,6 +13,7 @@ import sys
 import traceback
 import xlsxwriter
 
+
 import polars as pl
 import pandas as pd
 
@@ -25,6 +26,8 @@ from scripts.revision_informes import revisiones
 from scripts.desviaciones import desviaciones
 from scripts.informe_consumo import hacer_informe
 from scripts.rentabilidad import realizar_rentabilidad
+from scripts.conciliacion import conciliar_informacion
+from scripts.analisis_financiero import generar_informe_financiero
 
 
 # ══════════════════════════════════════════════
@@ -33,7 +36,7 @@ from scripts.rentabilidad import realizar_rentabilidad
 
 class ConsumoPipeline:
     """
-    Orquesta la ejecución secuencial de los 5 pasos del pipeline de reportes.
+    Orquesta la ejecución secuencial de los 8 pasos del pipeline de reportes.
 
     Pasos:
         1. Descarga de archivos desde SaludIPS.
@@ -41,6 +44,9 @@ class ConsumoPipeline:
         3. Auditoría de inconsistencias en centros de costo.
         4. Análisis de desviaciones estadísticas.
         5. Generación del informe final de consumos.
+        6. Generación del informe de rentabilidad.
+        7. Conciliación de totales.
+        8. Análisis financiero (varianza proveedor, eficiencia stock, gap facturación).
     """
 
     def __init__(self, fecha_inicio: str, fecha_fin: str):
@@ -66,6 +72,7 @@ class ConsumoPipeline:
         self.datos_desviaciones = None
         self.resultados_informe = None
         self.rentabilidad = None
+        self.analisis_financiero = None
 
     def _crear_carpeta_informes(self, rutas=None) -> Path:
         """
@@ -118,8 +125,11 @@ class ConsumoPipeline:
         print("PASO 1: DESCARGA DE ARCHIVOS")
         print("=" * 60)
         try:
-            self.rutas_descargadas = ejecutar_descarga(self.fecha_inicio, self.fecha_fin)
+            rutas_para_no_descargar = {'facturacion': r'D:/proyectos/Reportes_saludips/consumos/07/Facturacion 07 2026.xlsx', 'salidas': r'D:/proyectos/Reportes_saludips/consumos/07/Informe consumos 07 Salidas.xlsx', 'entradas': r'D:/proyectos/Reportes_saludips/consumos/07/Informe consumos mes de 07 Entradas.xlsx', 'listado': r'D:/proyectos/Reportes_saludips/consumos/07/Listado_Productos 07.xlsx', 'mes_informe': '07', 'dest_dir': r'D:/proyectos/Reportes_saludips/consumos/07'}
+            #self.rutas_descargadas = ejecutar_descarga(self.fecha_inicio, self.fecha_fin)
+            self.rutas_descargadas = rutas_para_no_descargar
             print(f"✓ Paso 1 completado. Archivos: {list(self.rutas_descargadas.keys())}")
+            print(f"rutas para colocar en vez del paso 1: \n{self.rutas_descargadas}")
             return self.rutas_descargadas
         except Exception as e:
             print(f"✗ Error en Paso 1 (Descarga): {e}")
@@ -153,16 +163,20 @@ class ConsumoPipeline:
 
             print(f"✓ Paso 2 completado.")
             print(f"  - consumos_facturacion: {self.consumos_de_facturacion.shape}")
-            print(f"  - facturacion_productos: {self.facturacion_productos.shape}")
-            print(f"  - entradas: {self.entradas.shape}")
-            print(f"  - Columnas consumos_facturacion: {self.consumos_de_facturacion.columns}")
+            print(f"  - Medicos Nullos: {self.anulados_limpieza.shape}")
             print(f"  - limpieza_consumos_facturacion: {self.limpieza_consumos_facturacion.shape}")
-            #print(f"  - Columnas limpieza_consumos_facturacion: {self.limpieza_consumos_facturacion.columns}")
-            print(f"  - consumos: {self.consumos_lectura.shape}")
-            
+            print(f"  - salidas_consumos: {self.salidas_consumo.shape}")
+            print(f"  - Entradas Facturacion: {self.entradas_facturacion.shape}")
+            print(f"  - Entradas consumo: {self.entradas_consumo.shape}")
 
-            return (self.consumos_de_facturacion, self.facturacion_productos, 
-                    self.entradas, self.listado_productos, self.anulados_limpieza, self.limpieza_consumos_facturacion, self.consumos_lectura)
+            ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
+            nombre_archivo = f"Medicos nullos {self._rango_fechas_archivo()}.xlsx"
+            ruta_salida = ruta_informes / nombre_archivo
+
+            self.anulados_limpieza.write_excel(str(ruta_salida))
+            print(f"✓ Inconsistencias guardadas en: {ruta_salida}")
+
+            return (self.consumos_de_facturacion, self.anulados_limpieza, self.limpieza_consumos_facturacion, self.salidas_consumo, self.entradas_facturacion, self.entradas_consumo)
         except Exception as e:
             print(f"✗ Error en Paso 2 (Carga): {e}")
             traceback.print_exc()
@@ -248,7 +262,7 @@ class ConsumoPipeline:
             if datos_consumos is None or datos_entradas is None:
                 raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
 
-            self.resultados_informe = hacer_informe(datos_consumos, datos_entradas)
+            self.resultados_informe = hacer_informe(datos_consumos_facturacion, datos_entradas_facturacion, datos_salidas_consumo, datos_salidas_consumo)
             
             ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
             nombre_archivo = f"informe_{self._rango_fechas_archivo()}.xlsx"
@@ -270,17 +284,20 @@ class ConsumoPipeline:
             traceback.print_exc()
             raise
 
-    def informe_rentabilidad(self, limpieza_consumos_facturacion: pl.DataFrame = None) -> pl.DataFrame:
+    # ── Paso 6: Generación de informe de rentabilidad ──
+
+    def informe_rentabilidad(self, consumos_de_facturacion: pl.DataFrame = None, entradas_facturacion: pl.DataFrame = None) -> pl.DataFrame:
         print("\n" + "=" * 60)
         print("PASO 6: GENERACIÓN DE INFORME DE RENTABILIDAD")
         print("=" * 60)
         try:
-            datos_limpios = limpieza_consumos_facturacion if limpieza_consumos_facturacion is not None else self.limpieza_consumos_facturacion
+            datos_limpios = consumos_de_facturacion if consumos_de_facturacion is not None else self.consumos_de_facturacion
+            datos_devoluciones = entradas_facturacion if entradas_facturacion is not None else self.entradas_facturacion
             
             if datos_limpios is None:
-                raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
+                raise ValueError("Faltan datos de medicamentos facturacion. Ejecute paso_5_informe() primero.")
 
-            self.rentabilidad = realizar_rentabilidad(datos_limpios)
+            self.rentabilidad = realizar_rentabilidad(datos_devoluciones, datos_limpios)
             
             ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
             nombre_archivo = f"informe_rentabilidad_{self._rango_fechas_archivo()}.xlsx"
@@ -294,8 +311,98 @@ class ConsumoPipeline:
             print(f"✗ Error en Paso 6 (Informe): {e}")
             traceback.print_exc()
             raise
+    
+    # ── Paso 7: Conciliación ──
+    def conciliacion(self, rutas: dict = None, resultados_informes: dict = None) -> dict:
+        """Conciliación de los datos de consumos usando las rutas del paso 1 o rutas proporcionadas."""
+        print("\n" + "=" * 60)
+        print("PASO 7: CONCILIACIÓN")
+        print("=" * 60)
+        try:
+            rutas_a_usar = rutas or self.rutas_descargadas
+            resultados_a_usar = resultados_informes or self.resultados_informe
 
+            if not rutas_a_usar:
+                raise ValueError("No hay rutas disponibles. Ejecute paso_1_descarga() primero o proporcione rutas.")
+            if not resultados_a_usar:
+                raise ValueError("No hay resultados disponibles. Ejecute paso_5_informe() primero o proporcione los resultados del informe.")
+
+            resultado = conciliar_informacion(rutas_a_usar, resultados_a_usar)
+            if resultado is None:
+                raise RuntimeError("La conciliación no pudo completarse (ver logs anteriores).")
+
+            print(f"✓ Paso 7 completado. Conciliación realizada")
+            return resultado
+        except Exception as e:
+            print(f"✗ Error en Paso 7 (Conciliación): {e}")
+            traceback.print_exc()
+            raise
+
+    # ── Paso 8: Análisis Financiero ──
+    def paso_8_analisis_financiero(
+        self,
+        consumos: pl.DataFrame = None,
+        entradas: pl.DataFrame = None,
+        facturacion: pl.DataFrame = None
+    ) -> dict:
+        """
+        Genera análisis financiero avanzado: varianza proveedor, eficiencia stock, gap facturación.
         
+        Args:
+            consumos: DataFrame combinado de consumos (facturación + salidas). Si None, usa datos del pipeline.
+            entradas: DataFrame combinado de entradas (facturación + consumo). Si None, usa datos del pipeline.
+            facturacion: DataFrame de facturación con detalle por admisión. Si None, usa consumos_de_facturacion.
+        """
+        print("\n" + "=" * 60)
+        print("PASO 8: ANÁLISIS FINANCIERO")
+        print("=" * 60)
+        try:
+            # Combinar consumos: facturación + salidas internas
+            datos_consumos = consumos if consumos is not None else None
+            if datos_consumos is None:
+                if self.limpieza_consumos_facturacion is not None and self.salidas_consumo is not None:
+                    datos_consumos = pl.concat([
+                        self.limpieza_consumos_facturacion,
+                        self.salidas_consumo
+                    ], how="diagonal_relaxed")
+                else:
+                    raise ValueError("Faltan datos de consumos. Ejecute paso_2_carga() primero.")
+            
+            # Combinar entradas: facturación + entradas internas
+            datos_entradas = entradas if entradas is not None else None
+            if datos_entradas is None:
+                if self.entradas_facturacion is not None and self.entradas_consumo is not None:
+                    datos_entradas = pl.concat([
+                        self.entradas_facturacion,
+                        self.entradas_consumo
+                    ], how="diagonal_relaxed")
+                else:
+                    raise ValueError("Faltan datos de entradas. Ejecute paso_2_carga() primero.")
+            
+            # Facturación para gap analysis (usa consumos_de_facturacion que ya tiene join con facturación)
+            datos_facturacion = facturacion if facturacion is not None else self.consumos_de_facturacion
+            if datos_facturacion is None:
+                raise ValueError("Faltan datos de facturación. Ejecute paso_2_carga() primero.")
+            
+            ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
+            nombre_archivo = f"analisis_financiero_{self._rango_fechas_archivo()}.xlsx"
+            ruta_salida = ruta_informes / nombre_archivo
+            
+            self.analisis_financiero = generar_informe_financiero(
+                consumos=datos_consumos,
+                entradas=datos_entradas,
+                facturacion=datos_facturacion,
+                ruta_salida=ruta_salida
+            )
+            
+            print(f"✓ Paso 8 completado. Análisis financiero guardado en: {ruta_salida}")
+            print(f"  - Hojas: Varianza_Proveedor, Eficiencia_Stock (Detalle/Resumen), Gap_Fact_Consumo (Detalle/Resumen/Alertas)")
+            return self.analisis_financiero
+            
+        except Exception as e:
+            print(f"✗ Error en Paso 8 (Análisis Financiero): {e}")
+            traceback.print_exc()
+            raise
 
     # ── Ejecución completa del pipeline ──
     def ejecutar(self, saltar_descarga: bool = False, rutas_manuales: dict = None) -> dict:
@@ -321,6 +428,8 @@ class ConsumoPipeline:
             'paso_4_desviaciones': None,
             'paso_5_informe': None,
             'paso_6_rentabilidad': None,
+            'paso_7_conciliacion': None,
+            'paso_8_analisis_financiero': None,
             'exitoso': False,
         }
 
@@ -346,6 +455,12 @@ class ConsumoPipeline:
 
             # Paso 6: Informe de rentabilidad
             resultados['paso_6_rentabilidad'] = self.informe_rentabilidad()
+
+            # Paso 7: Conciliación
+            resultados['paso_7_conciliacion'] = self.conciliacion() 
+
+            # Paso 8: Análisis Financiero
+            resultados['paso_8_analisis_financiero'] = self.paso_8_analisis_financiero()
 
             resultados['exitoso'] = True
             print("\n" + "█" * 60)

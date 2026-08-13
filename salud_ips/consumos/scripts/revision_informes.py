@@ -4,13 +4,13 @@ import polars as pl
 
 def revisiones(consumos_facturados: pl.DataFrame) -> pl.DataFrame:
 
-    revision_centros_costos = consumos_facturados.select(['CentroCosto', 'Municipio','Servicio','Tipo_servicio', 'Especialidad', 'MedicoRealiza', 'MedicoOrdena'])
+    revision_centros_costos = consumos_facturados.select(['CentroCosto', 'Municipio','Servicio','Tipo_servicio', 'Especialidad', 'MedicoRealiza'])
 
     #Medicina General y odontologia
     revision_cg = revision_centros_costos.filter(
         (pl.col("Servicio") == "consultas generales") & 
         (~pl.col("Especialidad").is_in(["MEDICINA GENERAL", "ODONTOLOGIA"]))
-    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza", "MedicoOrdena"]).agg(
+    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza"]).agg(
         pl.col("CentroCosto").count().alias("Cantidad Registros")
     )
 
@@ -20,7 +20,7 @@ def revisiones(consumos_facturados: pl.DataFrame) -> pl.DataFrame:
 
     revision_ce = revision_centros_costos.filter(
         (pl.col("Servicio") == "consultas especializadas") & pl.col("Especialidad").is_in(["MEDICINA GENERAL", "ODONTOLOGIA", 'HIGIENE ORAL'])
-    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza", "MedicoOrdena"]).agg(
+    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza"]).agg(
         pl.col("CentroCosto").count().alias("Cantidad Registros")
     )
 
@@ -28,7 +28,7 @@ def revisiones(consumos_facturados: pl.DataFrame) -> pl.DataFrame:
 
     revision_pym = revision_centros_costos.filter(
         (pl.col("Servicio") == 'pym') & (~pl.col('Especialidad').is_in(['MEDICINA GENERAL', 'ODONTOLOGIA', 'HIGIENE ORAL', 'ENFERMERIA', "GINECOLOGIA", 'EXPERTO EN VIH']))
-    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza", "MedicoOrdena"]).agg(
+    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza"]).agg(
         pl.col("CentroCosto").count().alias("Cantidad Registros")
     )
 
@@ -37,7 +37,7 @@ def revisiones(consumos_facturados: pl.DataFrame) -> pl.DataFrame:
     #cronicos
     revision_cro = revision_centros_costos.filter(
         (pl.col("Servicio") == 'cronicos') & (~pl.col('Especialidad').is_in(['MEDICINA INTERNA', 'MEDICINA GENERAL', 'ENDOCRINOLOGIA', 'MEDICINA FAMILIAR', 'CARDIOLOGIA', 'NEFROLOGIA', 'ENFERMERIA']))
-    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza", "MedicoOrdena"]).agg(
+    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza"]).agg(
         pl.col("CentroCosto").count().alias("Cantidad Registros")
     )
 
@@ -48,7 +48,7 @@ def revisiones(consumos_facturados: pl.DataFrame) -> pl.DataFrame:
 
     revision_sf = revision_centros_costos.filter(
         (pl.col('Servicio') == "servicio farmaceutico") & (~pl.col('MedicoRealiza').is_in(ENTIDADES))
-    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza", "MedicoOrdena"]).agg(
+    ).group_by(["CentroCosto", "Especialidad", "MedicoRealiza"]).agg(
         pl.col("CentroCosto").count().alias("Cantidad Registros")
     )
 
