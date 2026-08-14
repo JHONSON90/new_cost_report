@@ -2,45 +2,8 @@ import polars as pl
 
 def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos):
     #region CONSUMOS
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-    consumos_normales = consumos.filter(
-        pl.col("Comprobante").is_in(["SALIDAS INTERNAS ALMACEN", "SALIDAS INTERNAS FARMACIA"])
-    )
-
-    consumos_normales = consumos_normales.with_columns(
-        Municipio = pl.col("CentroCosto").str.slice(0, 3),
-        Servicio = pl.col("CentroCosto")
-                    .str.slice(3)
-                    .str.split("-")
-                    .list.get(0)
-                    .str.strip_chars(),
-        Tipo_servicio = pl.col("CentroCosto")
-                    .str.split("-")
-                    .list.get(1)
-                    .str.strip_chars()
-    )
-
-    consumos_normales = consumos_normales.with_columns(
-        pl.when(pl.col('CodArticulo').str.starts_with("1") == True).then(pl.lit("Medicamentos"))
-        .when(pl.col('CodArticulo').str.starts_with("2") == True).then(pl.lit("Dispositivos Medicos"))
-        .when(pl.col('CodArticulo').str.starts_with("3") == True).then(pl.lit("Suministros"))
-        .otherwise(pl.lit("OTRO"))
-        .alias("Clasificacion_consumo")
-    )
-=======
-    print("entro en el paso 5 y aqui tenemos las columnas de cada dataframe que entra")
-    print(f"facturacion {facturacion.columns}")
-    print(f"Entrada Facturacion {entrada_facturacion.columns}")
-    print(f"Consumos {consumos.columns}")
-    print(f"Entradas consumos {entradas_consumos.columns}")
     consumos_normales = consumos.clone()
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
-=======
-    consumos_normales = consumos.clone()
-    
->>>>>>> Stashed changes
     consumo_medicamentos = consumos_normales.filter(
         pl.col("Clasificacion_consumo") == "Medicamentos"
     ).group_by(['Municipio', 'Servicio']).agg(
@@ -65,45 +28,12 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
             pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
         )
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-    consumos_facturacion = consumos.filter(
-        pl.col("Comprobante") == 'SISTEMA DISPENSACION FARMACIA'
-    )
-
-    consumos_facturacion = consumos_facturacion.with_columns(
-        pl.col('NoDocumento').str.splitn("ADM: ", 2)
-        .struct.field('field_1')
-        .str.strip_chars()
-        .cast(pl.Int32)
-    ).with_columns(
-        pl.when(pl.col('CodArticulo').str.starts_with("1") == True).then(pl.lit("Medicamentos"))
-        .when(pl.col('CodArticulo').str.starts_with("2") == True).then(pl.lit("Dispositivos Medicos"))
-        .when(pl.col('CodArticulo').str.starts_with("3") == True).then(pl.lit("Suministros"))
-        .otherwise(pl.lit("OTRO"))
-        .alias("Clasificacion_consumo")
-    ).with_columns(
-        Municipio = pl.col("CentroCosto").str.slice(0, 3),
-        Servicio = pl.col("CentroCosto")
-                    .str.slice(3)
-                    .str.split("-")
-                    .list.get(0)
-                    .str.strip_chars(),
-        Tipo_servicio = pl.col("CentroCosto")
-                    .str.split("-")
-                    .list.get(1)
-                    .str.strip_chars()
-=======
     consumos_facturacion = facturacion.clone().with_columns(
         pl.when(pl.col('Servicio_Corregido').is_in(['pym', 'cronicos', 'terapias oncologicas', 'servicio farmaceutico']))
         .then(pl.col('Servicio_Corregido'))
         .otherwise(pl.col('Especialidad'))
         .alias('Especialidad')
->>>>>>> Stashed changes
     )
-=======
-    consumos_facturacion = facturacion.clone()
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
     servicio_farmaceutico_medicamentos = consumos_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Medicamentos"
@@ -156,21 +86,12 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
             pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
         )
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-    devolucion_facturacion = entradas.filter(
-        pl.col("Comprobante") == 'SISTEMA ANULACION DISPENSACION FARMACIA'
-=======
     devolucion_facturacion = entrada_facturacion.clone().with_columns(
         pl.when(pl.col('Servicio_Corregido').is_in(['pym', 'cronicos', 'terapias oncologicas', 'servicio farmaceutico']))
         .then(pl.col('Servicio_Corregido'))
         .otherwise(pl.col('Especialidad'))
         .alias('Especialidad')
->>>>>>> Stashed changes
     )
-=======
-    devolucion_facturacion = entrada_facturacion.clone()
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
     devolucion_fact_medicamentos = devolucion_facturacion.filter(
         pl.col('Clasificacion_consumo') == "Medicamentos"
@@ -179,8 +100,6 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
         ).with_columns(
             pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
-    
-    print(devolucion_fact_medicamentos)
 
     devolucion_fact_dispositivos = devolucion_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Dispositivos Medicos"
@@ -204,7 +123,6 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
 
     facturacion_medicamentos_sin_devolucion = servicio_farmaceutico_medicamentos.join(devolucion_fact_medicamentos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
     
-    #print(facturacion_medicamentos_sin_devolucion.filter(pl.col('Municipio') == 'Ipi'))
     facturacion_dispositivos_sin_devolucion = servicio_farmaceutico_dispositivos.join(devolucion_fact_dispositivos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
     facturacion_suministros_sin_devolucion = servicio_farmaceutico_suministros.join(devolucion_fact_suministros, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
 

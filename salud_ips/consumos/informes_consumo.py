@@ -267,7 +267,7 @@ class ConsumoPipeline:
             if datos_consumos_facturacion is None or datos_entradas_facturacion is None or datos_salidas_consumo is None or datos_entradas_consumo is None:
                 raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
 
-            self.resultados_informe = hacer_informe(datos_consumos_facturacion, datos_entradas_facturacion, datos_salidas_consumo, datos_salidas_consumo)
+            self.resultados_informe = hacer_informe(datos_consumos_facturacion, datos_entradas_facturacion, datos_salidas_consumo, datos_entradas_consumo)
             
             ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
             nombre_archivo = f"informe_{self._rango_fechas_archivo()}.xlsx"

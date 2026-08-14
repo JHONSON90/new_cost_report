@@ -1,65 +1,3 @@
-<<<<<<< HEAD
-# import polars as pl
-# from pathlib import Path
-
-# def conciliar_informacion(rutas: dict = None, resultados_informes: dict = None):
-#     try:
-#         if rutas is not None:
-#             ruta_consumos = Path(rutas['salidas'])
-#             ruta_entradas = Path(rutas['entradas'])
-#         else:
-#             print(f"Error: No se definieron las rutas")
-#             return None
-#         consumos_completo = pl.read_excel(str(ruta_consumos), read_options={"header_row": 6})
-#         entradas_completo = pl.read_excel(str(ruta_entradas), read_options={"header_row": 6})
-
-        
-#     except Exception as e:
-#         print(f"Error: {e}")
-#         return None
-
-#     medicamentos_procesado = resultados_informes['consumos_medicamentos'].clone()
-#     dispositivos_procesado = resultados_informes['consumos_dispositivos'].clone()
-#     suministros_procesado = resultados_informes['consumos_suministros'].clone()
-
-#     consumos_completo = consumos_completo.filter(
-#         pl.col("Comprobante").is_in(['SISTEMA DISPENSACION FARMACIA', 'SALIDAS INTERNAS ALMACEN', 'SALIDAS INTERNAS FARMACIA'])
-#     )
-
-#     entradas_completo = entradas_completo.filter(
-#         pl.col("Comprobante").is_in(['SISTEMA ANULACION DISPENSACION FARMACIA', 'ENTRADAS INTERNAS FARMACIA', 'ENTRADAS INTERNAS SIMA', 'ENTRADAS INTERNAS ALMACEN'])
-#     )
-
-#     comsumos_completo = consumos_completo.select(['ValorTotal']).sum().item()
-#     entradas_completo = entradas_completo.select(['ValorTotal']).sum().item()
-
-#     print(f"Consumos: {comsumos_completo}")
-#     print(f"Entradas: {entradas_completo}")
-
-#     total_limpio = consumos_completo - entradas_completo
-
-#     print(f"Total Limpio: {total_limpio}")
-
-#     medicamentos_procesado = medicamentos_procesado.select(pl.col('ValorNeto').sum().item())
-#     dispositivos_procesado = dispositivos_procesado.select(pl.col('ValorNeto').sum().item())
-#     suministros_procesado = suministros_procesado.select(pl.col('ValorNeto').sum().item())
-
-#     print(f"Medicamentos: {medicamentos_procesado}")
-#     print(f"Dispositivos: {dispositivos_procesado}")
-#     print(f"Suministros: {suministros_procesado}")
-
-#     total_procesado = medicamentos_procesado + dispositivos_procesado + suministros_procesado
-
-#     print(f"Total Procesado: {total_procesado}")
-
-#     diferencia = total_limpio - total_procesado
-
-#     if diferencia == 0:
-#         print(f"✓ Conciliacion exitosa")
-#     else:
-#         print(f"✗ Conciliacion fallida y la diferencia es de {diferencia}")
-
-# scripts/conciliacion.py
 import math
 import polars as pl
 from pathlib import Path
@@ -164,12 +102,3 @@ def conciliar_informacion(rutas: dict, resultados_informes: dict) -> dict:
         "diferencia": diferencia,
         "conciliacion_exitosa": exitosa,
     }
-
-
-    
-=======
-import polars as pl
-from pathlib import Path
-
-def conciliar_informacion(rutas: dict = None, ):
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964

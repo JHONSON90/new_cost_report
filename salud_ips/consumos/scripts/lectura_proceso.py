@@ -270,8 +270,7 @@ def cargar_datos(rutas: dict = None):
     #print(limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_not_null()))
     #print(limpieza_consumos_facturacion.shape)
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
+
     consumos_de_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
 =======
