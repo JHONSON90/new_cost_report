@@ -169,6 +169,20 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             rutas_generadas['entradas'] = ruta_entradas
             print(f"  ✓ Entradas descargadas: {ruta_entradas.name}")
 
+            #listado de inventario
+            page.goto('http://192.168.4.214/SaludIPS/Areas/Reportes/?CodReporte=almacenListadoInventario')
+            page.wait_for_load_state("load")
+            with page.expect_download(timeout=600000) as download_info:
+                page.get_by_role("button", name="Imprimir").click()
+            download4 = download_info.value
+            nombre_archivo4 = download4.suggested_filename
+            extension = Path(nombre_archivo4).suffix
+            nuevo_nombre4 = f"Listado_Productos {mes_informe}{extension}"
+            ruta_salidas = dest_dir / nuevo_nombre4
+            download4.save_as(str(ruta_salidas))
+            rutas_generadas['listado'] = ruta_salidas
+            print(f"  ✓ Listado Productos: {ruta_salidas.name}")
+
         except Exception as error:
             print(f"Error durante la descarga: {error}")
             raise

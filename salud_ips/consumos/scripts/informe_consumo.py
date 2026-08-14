@@ -1,7 +1,8 @@
 import polars as pl 
 
-def hacer_informe(consumos, entradas):
+def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos):
     #region CONSUMOS
+<<<<<<< HEAD
 <<<<<<< Updated upstream
     consumos_normales = consumos.filter(
         pl.col("Comprobante").is_in(["SALIDAS INTERNAS ALMACEN", "SALIDAS INTERNAS FARMACIA"])
@@ -27,6 +28,14 @@ def hacer_informe(consumos, entradas):
         .otherwise(pl.lit("OTRO"))
         .alias("Clasificacion_consumo")
     )
+=======
+    print("entro en el paso 5 y aqui tenemos las columnas de cada dataframe que entra")
+    print(f"facturacion {facturacion.columns}")
+    print(f"Entrada Facturacion {entrada_facturacion.columns}")
+    print(f"Consumos {consumos.columns}")
+    print(f"Entradas consumos {entradas_consumos.columns}")
+    consumos_normales = consumos.clone()
+>>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
 =======
     consumos_normales = consumos.clone()
@@ -48,7 +57,6 @@ def hacer_informe(consumos, entradas):
             pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
         )
     
-
     consumo_suministros = consumos_normales.filter(
         pl.col("Clasificacion_consumo") == "Suministros"
     ).group_by(['Municipio', 'Servicio']).agg(
@@ -57,6 +65,7 @@ def hacer_informe(consumos, entradas):
             pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
         )
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
     consumos_facturacion = consumos.filter(
         pl.col("Comprobante") == 'SISTEMA DISPENSACION FARMACIA'
@@ -92,54 +101,36 @@ def hacer_informe(consumos, entradas):
         .alias('Especialidad')
 >>>>>>> Stashed changes
     )
+=======
+    consumos_facturacion = facturacion.clone()
+>>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
     servicio_farmaceutico_medicamentos = consumos_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Medicamentos"
-    ).group_by(['Municipio', 'Servicio']).agg(
+    ).group_by(['Municipio', 'Especialidad']).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
     ).with_columns(
-            pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
+            pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
 
     servicio_farmaceutico_dispositivos = consumos_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Dispositivos Medicos"
-    ).group_by(['Municipio', 'Servicio']).agg(
+    ).group_by(['Municipio', 'Especialidad']).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
     ).with_columns(
-            pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
+            pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
 
     servicio_farmaceutico_suministros = consumos_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Suministros"
-    ).group_by(['Municipio', 'Servicio']).agg(
+    ).group_by(['Municipio', 'Especialidad']).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
     ).with_columns(
-            pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
+            pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
 
     #region Entradas
-    entradas = entradas.with_columns(
-            pl.when(pl.col('CodArticulo').str.starts_with("1") == True).then(pl.lit("Medicamentos"))
-            .when(pl.col('CodArticulo').str.starts_with("2") == True).then(pl.lit("Dispositivos Medicos"))
-            .when(pl.col('CodArticulo').str.starts_with("3") == True).then(pl.lit("Suministros"))
-            .otherwise(pl.lit("OTRO"))
-            .alias("Clasificacion_consumo")
-        ).with_columns(
-            Municipio = pl.col("CentroCosto").str.slice(0, 3),
-            Servicio = pl.col("CentroCosto")
-                        .str.slice(3)
-                        .str.split("-")
-                        .list.get(0)
-                        .str.strip_chars(),
-            Tipo_servicio = pl.col("CentroCosto")
-                        .str.split("-")
-                        .list.get(1)
-                        .str.strip_chars()
-        )
-
-    entradas_consumo = entradas.filter(
-        pl.col("Comprobante").is_in(["ENTRADAS INTERNAS FARMACIA", 'ENTRADAS INTERNAS SIMA', 'ENTRADAS INTERNAS ALMACEN'])
-    )
+    entradas_consumo = entradas_consumos.clone()
 
     consumo_entradas_medicamentos = entradas_consumo.filter(
         pl.col('Clasificacion_consumo') == "Medicamentos"
@@ -165,6 +156,7 @@ def hacer_informe(consumos, entradas):
             pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
         )
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
     devolucion_facturacion = entradas.filter(
         pl.col("Comprobante") == 'SISTEMA ANULACION DISPENSACION FARMACIA'
@@ -176,31 +168,34 @@ def hacer_informe(consumos, entradas):
         .alias('Especialidad')
 >>>>>>> Stashed changes
     )
+=======
+    devolucion_facturacion = entrada_facturacion.clone()
+>>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
     devolucion_fact_medicamentos = devolucion_facturacion.filter(
         pl.col('Clasificacion_consumo') == "Medicamentos"
-    ).group_by(['Municipio', 'Servicio']).agg(
+    ).group_by(['Municipio', 'Especialidad']).agg(
             pl.col('ValorTotal').sum().cast(pl.Int64)
         ).with_columns(
-            pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
+            pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
     
     print(devolucion_fact_medicamentos)
 
     devolucion_fact_dispositivos = devolucion_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Dispositivos Medicos"
-    ).group_by(['Municipio', 'Servicio']).agg(
+    ).group_by(['Municipio', 'Especialidad']).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
     ).with_columns(
-            pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
+            pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
 
     devolucion_fact_suministros = devolucion_facturacion.filter(
         pl.col("Clasificacion_consumo") == "Suministros"
-    ).group_by(['Municipio', 'Servicio']).agg(
+    ).group_by(['Municipio', 'Especialidad']).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
     ).with_columns(
-            pl.concat_str(['Municipio', 'Servicio'], separator='-').alias('Centro Costo')
+            pl.concat_str(['Municipio', 'Especialidad'], separator='-').alias('Centro Costo')
         )
 
     consumos_medicamentos_sin_entradas = consumo_medicamentos.join(consumo_entradas_medicamentos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
@@ -227,21 +222,24 @@ def hacer_informe(consumos, entradas):
 
     facturacion_medicamentos_sin_devolucion = facturacion_medicamentos_sin_devolucion.with_columns(
         (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).group_by('Municipio').agg(pl.col('ValorNeto').sum()).with_columns(
-        pl.lit("servicio farmaceutico").alias("Servicio")
-    ).select(['Municipio', 'Servicio', 'ValorNeto'])
+    ).group_by(['Municipio', 'Especialidad']).agg(pl.col('ValorNeto').sum()
+    ).select(['Municipio', 
+    pl.col('Especialidad').alias("Servicio"),
+    'ValorNeto'])
 
     facturacion_dispositivos_sin_devolucion = facturacion_dispositivos_sin_devolucion.with_columns(
         (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).group_by('Municipio').agg(pl.col('ValorNeto').sum()).with_columns(
-        pl.lit("servicio farmaceutico").alias("Servicio")
-    ).select(['Municipio', 'Servicio', 'ValorNeto'])
+    ).group_by(['Municipio', 'Especialidad']).agg(pl.col('ValorNeto').sum()
+    ).select(['Municipio', 
+    pl.col('Especialidad').alias("Servicio"),
+    'ValorNeto'])
 
     facturacion_suministros_sin_devolucion = facturacion_suministros_sin_devolucion.with_columns(
         (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).group_by('Municipio').agg(pl.col('ValorNeto').sum()).with_columns(
-        pl.lit("servicio farmaceutico").alias("Servicio")
-    ).select(['Municipio', 'Servicio', 'ValorNeto'])
+    ).group_by(['Municipio', 'Especialidad']).agg(pl.col('ValorNeto').sum()
+    ).select(['Municipio', 
+    pl.col('Especialidad').alias("Servicio"),
+    'ValorNeto'])
 
     #union facturacion con consumos
     medicamentos_completo = pl.concat([

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # import polars as pl
 # from pathlib import Path
 
@@ -166,3 +167,9 @@ def conciliar_informacion(rutas: dict, resultados_informes: dict) -> dict:
 
 
     
+=======
+import polars as pl
+from pathlib import Path
+
+def conciliar_informacion(rutas: dict = None, ):
+>>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964

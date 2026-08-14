@@ -65,9 +65,11 @@ class ConsumoPipeline:
         self.rutas_descargadas: dict = {}
         self.ruta_informes = None
         self.consumos_facturacion = None
-        self.facturacion_productos = None
-        self.entradas = None
-        self.listado_productos = None
+        self.anulados_limpieza = None
+        self.limpieza_consumos_facturacion = None
+        self.salidas_consumo = None
+        self.entradas_facturacion = None
+        self.entradas_consumo = None
         self.inconsistencias = None
         self.datos_desviaciones = None
         self.resultados_informe = None
@@ -154,12 +156,12 @@ class ConsumoPipeline:
             self.ruta_informes = self._crear_carpeta_informes(rutas_a_usar)
 
             (self.consumos_de_facturacion,
-             self.facturacion_productos,
-             self.entradas,
-             self.listado_productos, 
              self.anulados_limpieza, 
              self.limpieza_consumos_facturacion, 
-             self.consumos_lectura) = cargar_datos(rutas_a_usar)
+             self.salidas_consumo,
+             self.entradas_facturacion,
+             self.entradas_consumo
+             ) = cargar_datos(rutas_a_usar)
 
             print(f"✓ Paso 2 completado.")
             print(f"  - consumos_facturacion: {self.consumos_de_facturacion.shape}")
@@ -214,7 +216,7 @@ class ConsumoPipeline:
             raise
         
     # ── Paso 4: Desviaciones ──
-    def paso_4_desviaciones(self, consumos_lectura: pl.DataFrame = None) -> pl.DataFrame:
+    def paso_4_desviaciones(self, limpieza_consumos_facturacion: pl.DataFrame = None) -> pl.DataFrame:
         """
         Calcula desviaciones estadísticas (moda, media, std) sobre los consumos.
 
@@ -225,7 +227,7 @@ class ConsumoPipeline:
         print("PASO 4: ANÁLISIS DE DESVIACIONES")
         print("=" * 60)
         try:
-            datos = consumos_lectura if consumos_lectura is not None else self.consumos_lectura
+            datos = limpieza_consumos_facturacion if limpieza_consumos_facturacion is not None else self.limpieza_consumos_facturacion
             if datos is None:
                 raise ValueError("No hay datos de consumos. Ejecute paso_2_carga() primero.")
 
@@ -243,7 +245,7 @@ class ConsumoPipeline:
             raise
 
     # ── Paso 5: Generación de informe ──
-    def paso_5_informe(self, consumos_lectura: pl.DataFrame = None, entradas: pl.DataFrame = None) -> tuple:
+    def paso_5_informe(self, consumos_de_facturacion: pl.DataFrame = None, entradas_facturacion: pl.DataFrame = None, salidas_consumo: pl.DataFrame = None, entradas_consumo: pl.DataFrame = None) -> tuple:
         """
         Genera el informe final de consumos netos (salidas - entradas).
 
@@ -256,10 +258,13 @@ class ConsumoPipeline:
         print("PASO 5: GENERACIÓN DE INFORME FINAL")
         print("=" * 60)
         try:
-            datos_consumos = consumos_lectura if consumos_lectura is not None else self.consumos_lectura
-            datos_entradas = entradas if entradas is not None else self.entradas
+            datos_consumos_facturacion = consumos_de_facturacion if consumos_de_facturacion is not None else self.consumos_de_facturacion
+            datos_entradas_facturacion = entradas_facturacion if entradas_facturacion is not None else self.entradas_facturacion
+            datos_salidas_consumo = salidas_consumo if salidas_consumo is not None else self.salidas_consumo
+            datos_entradas_consumo = entradas_consumo if entradas_consumo is not None else self.entradas_consumo
+
             
-            if datos_consumos is None or datos_entradas is None:
+            if datos_consumos_facturacion is None or datos_entradas_facturacion is None or datos_salidas_consumo is None or datos_entradas_consumo is None:
                 raise ValueError("Faltan datos de consumos y/o entradas. Ejecute paso_2_carga() primero.")
 
             self.resultados_informe = hacer_informe(datos_consumos_facturacion, datos_entradas_facturacion, datos_salidas_consumo, datos_salidas_consumo)

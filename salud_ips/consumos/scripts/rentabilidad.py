@@ -5,14 +5,19 @@ from pathlib import Path
 
 <<<<<<< Updated upstream
 def realizar_rentabilidad(limpieza_consumos_facturacion):
+<<<<<<< HEAD
 =======
 def realizar_rentabilidad(entradas_facturacion, facturacion):
     #TODO QUITAR LAS DEVOLUCIONES OSEA LAS ENTRADAS PARA PODER TENER BIEN EL INFORME
 >>>>>>> Stashed changes
+=======
+    #TODO QUITAR LAS DEVOLUCIONES OSEA LAS ENTRADAS PARA PODER TENER BIEN EL INFORME
+>>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
     try:
         entradas_facturacion = entradas_facturacion.with_columns(
             pl.concat_str(['field_1', 'CodigoGenerico'], separator="-").alias("ADM-CodGen")
         )
+<<<<<<< HEAD
 
 <<<<<<< Updated upstream
         print(limpieza_consumos_facturacion.filter(
@@ -41,6 +46,8 @@ def realizar_rentabilidad(entradas_facturacion, facturacion):
         #     (pl.col('Cantidad_neta') - pl.col('cantidad')).sum().cast(pl.Int64).alias("Diferencia Cantidad")
         # )
 >>>>>>> Stashed changes
+=======
+>>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
     
     except Exception as e:
         print(f"Error en realizar_rentabilidad: {e}")
