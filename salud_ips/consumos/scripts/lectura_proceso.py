@@ -13,6 +13,8 @@ def dividir_cc(data: pl.DataFrame = None):
         .str.strip_chars()
         .cast(pl.Int32, strict=False)
         .fill_null(0)
+        .cast(pl.Int32, strict=False)
+        .fill_null(0)
     ).with_columns(
         pl.when(pl.col('CodArticulo').str.starts_with("1") == True).then(pl.lit("Medicamentos"))
         .when(pl.col('CodArticulo').str.starts_with("2") == True).then(pl.lit("Dispositivos Medicos"))
@@ -33,14 +35,11 @@ def dividir_cc(data: pl.DataFrame = None):
     )
     return data
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
+
     #region Procesamiento y entregables
     #def procesamiento_datos():
-    consumos_facturacion = consumos_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left").with_columns(
-=======
-=======
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
+    #consumos_facturacion = consumos_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left").with_columns(
+
 def cargar_datos(rutas: dict = None):
     """
     Carga y procesa los datos de consumo desde los archivos descargados.
@@ -98,28 +97,9 @@ def cargar_datos(rutas: dict = None):
     listado_productos = listado_productos.select(["Codigo",'Nombre','CodigoGenerico','EstadoArticulo'])
 
     #region FACTURACION
-<<<<<<< HEAD
-    facturacion_productos = facturacion.select(["idadmision", 'nofactura', 'idusuario', 'nomtiposervicio','codigo','nombre','cantidad','CantidadSolicitada','vrunitario','vrtotal','Especialidad','MedicoRealiza']).filter(
-        pl.col('nomtiposervicio') == "FARMACIA"
-    )
-    facturacion_productos = facturacion_productos.with_columns(
-        pl.col('cantidad').cast(pl.Int64, strict=False),
-        pl.col('CantidadSolicitada').cast(pl.Int64, strict=False),
-        pl.col('vrunitario').cast(pl.Float64, strict=False),
-        pl.col('vrtotal').cast(pl.Float64, strict=False)
-    )
-
-    facturacion_productos = facturacion_productos.group_by(["idadmision", 'nofactura', 'idusuario', 'nomtiposervicio','codigo','nombre','Especialidad','MedicoRealiza']).agg(
-        pl.col('cantidad').sum().alias('cantidad'),
-        pl.col('CantidadSolicitada').sum().alias('CantidadSolicitada'),
-        pl.col('vrunitario').mean().alias('vrunitario'),
-        pl.col('vrtotal').sum().alias('vrtotal'),
-    )
-=======
     facturacion_productos = facturacion.select(["idadmision", 'nofactura', 'idusuario', 'nomtiposervicio','codigo','nombre','cantidad','CantidadSolicitada','vrunitario','vrtotal','Especialidad','MedicoRealiza','MedicoOrdena']).filter(
         pl.col('nomtiposervicio') == "FARMACIA"
     )
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
 
     #sacamos el numero de id del paciente
     facturacion_productos = facturacion_productos.with_columns(
@@ -139,29 +119,12 @@ def cargar_datos(rutas: dict = None):
 
     #unimos con codigo del listado de productos
     consumos_facturacion = consumos_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left")
-<<<<<<< HEAD
-    #TODO unificar por codigo y eliminar el codarticulo
-    consumos_facturacion = consumos_facturacion.group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'tipo de insumo', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
-        pl.col('Cantidad').sum().alias('Cantidad'),
-        pl.col('ValorUnitario').mean().alias('ValorUnitario'),
-        pl.col('TotalBruto').sum().alias('TotalBruto'),
-        pl.col('ValorIVA').sum().alias('ValorIVA'),
-        pl.col('ValorDescuento').sum().alias('ValorDescuento'),
-        pl.col('ValorTotal').sum().alias('ValorTotal'),
-    )
-    # print("-0"*60)
-    # print(f"columnas de consumos_facturacion \n {consumos_facturacion.columns}")
-    # print("-0"*60)
-
-=======
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
     
     consumos_facturacion = consumos_facturacion.with_columns(
         pl.col("CodigoGenerico").cast(pl.Int64)
     )
 
     entradas_de_facturacion = entradas_de_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left")
-<<<<<<< HEAD
 
     entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'tipo insumo', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
         pl.col('Cantidad').sum().alias('Cantidad'),
@@ -172,12 +135,8 @@ def cargar_datos(rutas: dict = None):
         pl.col('ValorTotal').sum().alias('ValorTotal'),
     )
 
+
     entradas_de_facturacion = entradas_de_facturacion.with_columns(
->>>>>>> Stashed changes
-=======
-    
-    entradas_de_facturacion = entradas_de_facturacion.with_columns(
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
         pl.col("CodigoGenerico").cast(pl.Int64)
     )
     consumos_facturacion = consumos_facturacion.with_columns(
@@ -208,10 +167,6 @@ def cargar_datos(rutas: dict = None):
     consumos_with_fact = consumos_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
     consumos_with_fact.write_csv("Revisiondeconsumos_facturacion.csv")
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-
     entradas_de_facturacion = entradas_de_facturacion.join(para_entradas_facturacion, left_on="field_1", right_on="idadmision", how="left").with_columns(
         pl.when((pl.col('Servicio') == 'servicio farmaceutico') & (pl.col('MedicoRealiza').is_in(ENTIDADES)))
         .then(pl.lit("servicio farmaceutico"))
@@ -227,11 +182,7 @@ def cargar_datos(rutas: dict = None):
         .alias("Servicio_Corregido")
     )
 
->>>>>>> Stashed changes
-=======
     entradas_de_facturacion = entradas_de_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
-
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
     consumos_with_fact = consumos_with_fact.with_columns(
         pl.col("vrtotal").cast(pl.Float64),
         pl.col("ValorTotal").cast(pl.Float64),
@@ -273,19 +224,17 @@ def cargar_datos(rutas: dict = None):
 
     consumos_de_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
-=======
+    )
+
     consumos_de_facturacion = limpieza_consumos_facturacion.with_columns(
         pl.when(pl.col("Servicio_Corregido").is_in(["consultas generales", "consultas especializadas"]))
         .then(pl.col('Especialidad'))
         .otherwise(pl.col('Servicio_Corregido'))
         .alias('Especialidad')
     )
-=======
+
     consumos_de_facturacion = limpieza_consumos_facturacion.clone()
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
-    # .group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
-    #     pl.col('ValorTotal').sum().cast(pl.Int64)
-    # )
+
 
     salidas_consumo = consumos_lectura_1.filter(
         pl.col("Comprobante").is_in(['SALIDAS INTERNAS ALMACEN', 'SALIDAS INTERNAS FARMACIA'])
@@ -293,23 +242,11 @@ def cargar_datos(rutas: dict = None):
 
     entradas_consumo = entradas_1.filter(
         pl.col('Comprobante').is_in(['ENTRADAS INTERNAS FARMACIA', 'ENTRADAS INTERNAS SIMA', 'ENTRADAS INTERNAS ALMACEN'])
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
+
     )
 
     print("✓ Limpieza de archivos completada con exito!!")
     #print(f"\n\nConsumos de facturación:\n{consumos_de_facturacion}")
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-    return consumos_de_facturacion, facturacion_productos, entradas, listado_productos, anulados_limpieza, limpieza_consumos_facturacion, consumos_lectura
-=======
     return consumos_de_facturacion, anulados_limpieza, limpieza_consumos_facturacion, salidas_consumo, entradas_de_facturacion, entradas_consumo
->>>>>>> Stashed changes
-=======
-    print
 
-    return consumos_de_facturacion, anulados_limpieza, limpieza_consumos_facturacion, salidas_consumo, entradas_de_facturacion, entradas_consumo
->>>>>>> 4cd4d7f832ac007ad47594e455c8332115d8f964
