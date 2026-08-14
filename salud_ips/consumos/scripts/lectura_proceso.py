@@ -11,7 +11,8 @@ def dividir_cc(data: pl.DataFrame = None):
         pl.col('NoDocumento').str.splitn("ADM: ", 2)
         .struct.field('field_1')
         .str.strip_chars()
-        .cast(pl.Int32)
+        .cast(pl.Int32, strict=False)
+        .fill_null(0)
     ).with_columns(
         pl.when(pl.col('CodArticulo').str.starts_with("1") == True).then(pl.lit("Medicamentos"))
         .when(pl.col('CodArticulo').str.starts_with("2") == True).then(pl.lit("Dispositivos Medicos"))
@@ -31,6 +32,11 @@ def dividir_cc(data: pl.DataFrame = None):
                     .str.strip_chars()
     )
     return data
+
+
+    #region Procesamiento y entregables
+    #def procesamiento_datos():
+    #consumos_facturacion = consumos_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left").with_columns(
 
 def cargar_datos(rutas: dict = None):
     """
@@ -117,7 +123,17 @@ def cargar_datos(rutas: dict = None):
     )
 
     entradas_de_facturacion = entradas_de_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left")
-    
+
+    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'tipo insumo', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+        pl.col('Cantidad').sum().alias('Cantidad'),
+        pl.col('ValorUnitario').mean().alias('ValorUnitario'),
+        pl.col('TotalBruto').sum().alias('TotalBruto'),
+        pl.col('ValorIVA').sum().alias('ValorIVA'),
+        pl.col('ValorDescuento').sum().alias('ValorDescuento'),
+        pl.col('ValorTotal').sum().alias('ValorTotal'),
+    )
+
+
     entradas_de_facturacion = entradas_de_facturacion.with_columns(
         pl.col("CodigoGenerico").cast(pl.Int64)
     )
@@ -137,12 +153,32 @@ def cargar_datos(rutas: dict = None):
     facturacion_productos = facturacion_productos.with_columns(
         pl.concat_str(['idadmision', 'codigo'], separator="-").alias("ADM-CodGen")
     )
+    para_entradas_facturacion = facturacion_productos.select(['idadmision', 'Especialidad', 'MedicoRealiza']).unique()
+
+    # print(f"Columnas de facturacion\n {facturacion_productos.columns}")
+    # print(f"Columnas de entradas_de_facturacion\n {entradas_de_facturacion.columns}")
 
     # entradas_de_facturacion = entradas_de_facturacion.with_columns(
     #     pl.concat_str(['idadmision', 'codigo'], separator="-").alias("ADM-CodGen")
     # )
 
     consumos_with_fact = consumos_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
+    consumos_with_fact.write_csv("Revisiondeconsumos_facturacion.csv")
+
+    entradas_de_facturacion = entradas_de_facturacion.join(para_entradas_facturacion, left_on="field_1", right_on="idadmision", how="left").with_columns(
+        pl.when((pl.col('Servicio') == 'servicio farmaceutico') & (pl.col('MedicoRealiza').is_in(ENTIDADES)))
+        .then(pl.lit("servicio farmaceutico"))
+        .when((pl.col('Servicio') == "consultas generales") & (~pl.col("Especialidad").is_in(["MEDICINA GENERAL", 'ODONTOLOGIA'])) & (~pl.col('MedicoRealiza').is_in(ENTIDADES)))
+        .then(pl.lit("consultas especializadas"))
+        .when((pl.col('Servicio') == "consultas especializadas") & (pl.col("Especialidad").is_in(["MEDICINA GENERAL", 'ODONTOLOGIA'])) & (~pl.col('MedicoRealiza').is_in(ENTIDADES)))
+        .then(pl.lit("consultas generales"))
+        .when((pl.col('Servicio').is_in(["consultas especializadas", 'consultas generales']) & (pl.col("Especialidad") == 'ENFERMERIA') & (~pl.col('MedicoRealiza').is_in(ENTIDADES))))
+        .then(pl.lit("pym"))
+        .when((pl.col("Especialidad").is_in(["ONCOLOGIA", 'TERAPIAS ONCOLOGICAS'])) & (~pl.col('MedicoRealiza').is_in(ENTIDADES)))
+        .then(pl.lit("terapias oncologicas"))
+        .otherwise(pl.col('Servicio'))
+        .alias("Servicio_Corregido")
+    )
 
     entradas_de_facturacion = entradas_de_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
 
@@ -169,12 +205,14 @@ def cargar_datos(rutas: dict = None):
         .then(pl.lit("consultas generales"))
         .when((pl.col('Servicio').is_in(["consultas especializadas", 'consultas generales']) & (pl.col("Especialidad") == 'ENFERMERIA') & (~pl.col('MedicoRealiza').is_in(ENTIDADES))))
         .then(pl.lit("pym"))
+        .when((pl.col("Especialidad").is_in(["ONCOLOGIA", 'TERAPIAS ONCOLOGICAS'])) & (~pl.col('MedicoRealiza').is_in(ENTIDADES)))
+        .then(pl.lit("terapias oncologicas"))
         .otherwise(pl.col('Servicio'))
         .alias("Servicio_Corregido")
     )
 
     anulados_limpieza = limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_null()).select(
-        ['Comprobante','Numero','Fecha','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','CodArticulo','Articulo','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','ADM-CodGen','idadmision','nofactura','idusuario','nomtiposervicio','codigo']
+        ['Comprobante','Numero','Fecha','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','codigo', 'Nombre','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','ADM-CodGen','idadmision','nofactura','idusuario','nomtiposervicio']
     )
     #print(f"\n\nAnulados: \n{anulados_limpieza}")
     #para pasar a facturacion y solicitar cerrar esas facturas
@@ -182,10 +220,20 @@ def cargar_datos(rutas: dict = None):
     #print(limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_not_null()))
     #print(limpieza_consumos_facturacion.shape)
 
+
+    consumos_de_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
+        pl.col('ValorTotal').sum().cast(pl.Int64)
+    )
+
+    consumos_de_facturacion = limpieza_consumos_facturacion.with_columns(
+        pl.when(pl.col("Servicio_Corregido").is_in(["consultas generales", "consultas especializadas"]))
+        .then(pl.col('Especialidad'))
+        .otherwise(pl.col('Servicio_Corregido'))
+        .alias('Especialidad')
+    )
+
     consumos_de_facturacion = limpieza_consumos_facturacion.clone()
-    # .group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
-    #     pl.col('ValorTotal').sum().cast(pl.Int64)
-    # )
+
 
     salidas_consumo = consumos_lectura_1.filter(
         pl.col("Comprobante").is_in(['SALIDAS INTERNAS ALMACEN', 'SALIDAS INTERNAS FARMACIA'])
@@ -193,11 +241,11 @@ def cargar_datos(rutas: dict = None):
 
     entradas_consumo = entradas_1.filter(
         pl.col('Comprobante').is_in(['ENTRADAS INTERNAS FARMACIA', 'ENTRADAS INTERNAS SIMA', 'ENTRADAS INTERNAS ALMACEN'])
+
     )
 
     print("✓ Limpieza de archivos completada con exito!!")
     #print(f"\n\nConsumos de facturación:\n{consumos_de_facturacion}")
 
-    print
-
     return consumos_de_facturacion, anulados_limpieza, limpieza_consumos_facturacion, salidas_consumo, entradas_de_facturacion, entradas_consumo
+
