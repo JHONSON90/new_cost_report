@@ -77,12 +77,14 @@ def conciliar_informacion(rutas: dict, resultados_informes: dict) -> dict:
     print(f"Total Limpio: {total_limpio:,.2f}")
 
     total_medicamentos = _sumar_valor_neto(resultados_informes["consumos_medicamentos"])
-    total_dispositivos = _sumar_valor_neto(resultados_informes["consumos_dispositivos"])
+    total_dispositivos = _sumar_valor_neto(resultados_informes["consumos_dispositivos_formulados"])
+    total_dispositivos_consumo = _sumar_valor_neto(resultados_informes["consumo_dispositivos"])
     total_suministros = _sumar_valor_neto(resultados_informes["consumos_suministros"])
-    total_procesado = total_medicamentos + total_dispositivos + total_suministros
+    total_procesado = total_medicamentos + total_dispositivos + total_suministros + total_dispositivos_consumo
 
     print(f"Medicamentos: {total_medicamentos:,.2f}")
-    print(f"Dispositivos: {total_dispositivos:,.2f}")
+    print(f"Dispositivos Formulados: {total_dispositivos:,.2f}")
+    print(f"Dispositivos Formulados: {total_dispositivos_consumo:,.2f}")
     print(f"Suministros: {total_suministros:,.2f}")
     print(f"Total Procesado: {total_procesado:,.2f}")
 

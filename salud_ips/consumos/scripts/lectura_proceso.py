@@ -6,9 +6,10 @@ from pathlib import Path
 ENTIDADES  = ['CEDIT  DEL SUR SAS ', 'CENTRO  DE CUIDADOS CARDIOVASCULARES PABON SAS ', 'CENTRO  DE ESPECIALISTAS NUTRICION DIABETES OBESIDAD Y OSTEOPOROSIS SAS', 'CENTRO  HOSPITAL SAN JUAN BAUSTISTA ', 'CHRISTUS  SINERGIA SALUD. SA PASTO ', 'CLINCA  NORTE ESPECIALIDADES SAS ', 'CLINICA  DE OJOS (CLINOJOS) SA ', 'CLINICA  DE ORTOPEDIA Y FRACTURAS TRAUMEDICAL ', 'CLINICA  FUNDONAR ', 'CLINICA  IMBANACO SAS ', 'CLINICA  LAS LAJAS SAS ', 'CLINICA  NUESTRA SEÑORA DE FATIMA SA ', 'CLINICA  OFTALMOLOGICA CALI ', 'CLINICA  OFTALMOLOGICA PAREDES SAS ', 'CLINICA  OFTALMOLOGICA UNIGARRO LTDA ', 'CLINICA  ONCOLOGICA AURORA PASTO SAS ', 'CLINICA  PUENTE DEL MEDIO SAS ', 'CLINICA  SOL DE LOS ANDES SAS ', 'COMPLEMEDICA  SAS ', 'E.S.E  CEHANI ', 'E.S.E  CENTO DE SALUD NUESTRA SEÑORA DEL PILAS DE ALDANA ', 'E.S.E  CENTRO DE SALUD ANCUYA ', 'E.S.E  CENTRO DE SALUD BELEN ', 'E.S.E  CENTRO DE SALUD CONSACA ', 'E.S.E  CENTRO DE SALUD DE SAN BARTOLOME DE CORDOBA ', 'E.S.E  CENTRO DE SALUD EL ROSARIO ', 'E.S.E  CENTRO DE SALUD GUACHAVES ', 'E.S.E  CENTRO DE SALUD ILES ', 'E.S.E  CENTRO DE SALUD LA BUENA ESPERANZA ', 'E.S.E  CENTRO DE SALUD SAN BERNARDO ', 'E.S.E  CENTRO DE SALUD SAN FRANCISCO ', 'E.S.E  CENTRO DE SALUD SAN JUAN BAUTISTA DE PUPIALES ', 'E.S.E  CENTRO DE SALUD SAN LORENZO ', 'E.S.E  CENTRO DE SALUD SAN MIGUEL ', 'E.S.E  CENTRO DE SALUD SEÑOR DEL MAR ', 'E.S.E  CENTRO DE SALUD TABLON DE GOMEZ ', 'E.S.E  CENTRO HOSPITAL DIVINO NIÑO ', 'E.S.E  CENTRO HOSPITAL GUAITARILLA ', 'E.S.E  CENTRO HOSPITAL LUIS ANTONIO MONTERO ', 'E.S.E  CENTRO HOSPITAL NUESTRO SEÑOR  DE LA DIVINA MISERICORDIA PUERRES', 'E.S.E  HOSPITAL CIVIL DE IPIALES ', 'E.S.E  HOSPITAL CLARITA SANTOS DE SANDONA ', 'E.S.E  HOSPITAL CUMBAL ', 'E.S.E  HOSPITAL EDUARDO SANTOS ', 'E.S.E  HOSPITAL GUACHUCAL ', 'E.S.E  HOSPITAL SAN ANDRES ', 'E.S.E  HOSPITAL SAN CARLOS ', 'E.S.E  HOSPITAL UNIVERSITARIO DEL VALLE EVARISTO GARCIA ', 'E.S.E  JUAN PABLO SEGUNDO DE LINARES ', 'E.S.E  SAN PEDRO DE CUMBITARA ', 'E.S.E  VIRGEN DE LOURDES BUESACO ', 'ECOGRAFIAS  OBSTETRICAS ', 'ELECTROS  TUQUERRES ', 'FUNDACION  HOSPITAL INFANTIL LOS ANGELES ', 'FUNDACION  HOSPITAL SAN PEDRO ', 'FUNDACION  SANTA FE DE BOGOTA ', 'FUNDACION  VALLE DE LILI ', 'HOSPITAL  DEPARTAMENTAL DE NARIÑO SAS ', 'HOSPITAL  LORENCITA VILLEGAS DE SANTOS ', 'HOSPITAL  MENTAL PERPETUO SOCORRO ', 'HOSPITAL  SAN RAFAEL DE PASTO ', 'INSTITUTO  NEUROCIENCIAS DE NARIÑO IPS SAS ', 'INSTITUTO  PARA NIÑOS CIEGOS Y SORDOS DEL VALLE DEL CAUCA ', 'IPS  MEDICALFISIO ', 'IPS  SALUD DE LOS ANDES SAS ', 'IPS  UNIMEDIC SAS ', 'IPS  UNION SALUD SAS ', 'MEDINUCLEAR  SAS ', 'NEURO  CENTRO COLOMBIA SAS ', 'NEURO  CLINICA SAS ', 'PASTO  FUNDACION CONEXION SALUD ', 'PRAXIS  CENTRO DE REHABILITACION FUNCIONAL ', 'RED  MEDICROM IPS HOSPITAL SAN JOSE ', 'SERVICIO  INTEGRAL DE REUMATOLOGIA E INMUNOLOGIA SAS ', 'UNIDAD  CARDIOQUIRURGICA DE NARIÑO SAS ', 'UNIDAD  DE FISIATRIA Y ORTHOINTEGRAL SAS ', 'UNIDAD  MEDICA UROLOGICA DE NARIÑO UROLAN SAS ', 'UNIDAD  PEDIATRICA DEL SUR ', 'UNIDAD  RENAL NEFRODIAL ', 'VIDA  EN CASA SAS ']
 
 
+#region Dividir admision
 def dividir_cc(data: pl.DataFrame = None):
     data = data.with_columns(
-        pl.col('NoDocumento').str.splitn("ADM: ", 2)
+        pl.col('NoDocumento').str.splitn("ADM: ", 8)
         .struct.field('field_1')
         .str.strip_chars()
         .cast(pl.Int32, strict=False)
@@ -86,19 +87,33 @@ def cargar_datos(rutas: dict = None):
         print(f"Error en cargar_datos: {e}")
         raise
 
+    #region Facturacion
     consumos_lectura = consumos.clone()
     #dIvidimos el centro de costo por mpio, servicio y tipo ss
     consumos_lectura_1 = dividir_cc(consumos_lectura)
+    
     entradas_1 = dividir_cc(entradas)
-
-    #TODO: UNIFICAR POR CODIGO DE PRODUCTO LA CANTIDAD DEL CONSUMO O -"Cantidad"
+    # with pl.Config(tbl_cols=-1, tbl_width_chars=1000):
+    #     print(entradas_1.tail(5))
 
     #region LISTADO DE PRODUCTOS
     listado_productos = listado_productos.select(["Codigo",'Nombre','CodigoGenerico','EstadoArticulo'])
 
     #region FACTURACION
-    facturacion_productos = facturacion.select(["idadmision", 'nofactura', 'idusuario', 'nomtiposervicio','codigo','nombre','cantidad','CantidadSolicitada','vrunitario','vrtotal','Especialidad','MedicoRealiza','MedicoOrdena']).filter(
+    facturacion_productos = facturacion.select(["idadmision", 'nofactura', 'idusuario', 'nomtiposervicio','codigo','nombre','cantidad','CantidadSolicitada','vrunitario','vrtotal','Especialidad','MedicoRealiza']).filter(
         pl.col('nomtiposervicio') == "FARMACIA"
+    ).with_columns(
+        pl.col('cantidad').cast(pl.Int64),
+        pl.col('CantidadSolicitada').cast(pl.Int64),
+        pl.col('vrunitario').cast(pl.Float64),
+        pl.col('vrtotal').cast(pl.Float64)
+    )
+    
+    facturacion_productos = facturacion_productos.group_by(['idadmision', 'nofactura', 'idusuario', 'nomtiposervicio','codigo','nombre','Especialidad','MedicoRealiza']).agg(
+        pl.col('cantidad').sum(),
+        pl.col('CantidadSolicitada').sum(),
+        pl.col('vrunitario').mean(),
+        pl.col('vrtotal').sum()
     )
 
     #sacamos el numero de id del paciente
@@ -122,11 +137,19 @@ def cargar_datos(rutas: dict = None):
     
     consumos_facturacion = consumos_facturacion.with_columns(
         pl.col("CodigoGenerico").cast(pl.Int64)
+    ).group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+        pl.col('Cantidad').sum().alias('Cantidad'),
+        pl.col('ValorUnitario').mean().alias('ValorUnitario'),
+        pl.col('TotalBruto').sum().alias('TotalBruto'),
+        pl.col('ValorIVA').sum().alias('ValorIVA'),
+        pl.col('ValorDescuento').sum().alias('ValorDescuento'),
+        pl.col('ValorTotal').sum().alias('ValorTotal'),
     )
+
 
     entradas_de_facturacion = entradas_de_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left")
 
-    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'tipo insumo', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
         pl.col('Cantidad').sum().alias('Cantidad'),
         pl.col('ValorUnitario').mean().alias('ValorUnitario'),
         pl.col('TotalBruto').sum().alias('TotalBruto'),
@@ -155,6 +178,7 @@ def cargar_datos(rutas: dict = None):
     facturacion_productos = facturacion_productos.with_columns(
         pl.concat_str(['idadmision', 'codigo'], separator="-").alias("ADM-CodGen")
     )
+
     para_entradas_facturacion = facturacion_productos.select(['idadmision', 'Especialidad', 'MedicoRealiza']).unique()
 
     # print(f"Columnas de facturacion\n {facturacion_productos.columns}")
@@ -165,7 +189,7 @@ def cargar_datos(rutas: dict = None):
     # )
 
     consumos_with_fact = consumos_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
-    consumos_with_fact.write_csv("Revisiondeconsumos_facturacion.csv")
+    #consumos_with_fact.write_csv("Revisiondeconsumos_facturacion.csv")
 
     entradas_de_facturacion = entradas_de_facturacion.join(para_entradas_facturacion, left_on="field_1", right_on="idadmision", how="left").with_columns(
         pl.when((pl.col('Servicio') == 'servicio farmaceutico') & (pl.col('MedicoRealiza').is_in(ENTIDADES)))
@@ -180,6 +204,10 @@ def cargar_datos(rutas: dict = None):
         .then(pl.lit("terapias oncologicas"))
         .otherwise(pl.col('Servicio'))
         .alias("Servicio_Corregido")
+    )
+    entradas_de_facturacion = entradas_de_facturacion.with_columns(
+        pl.when((pl.col("Especialidad").is_null()) | (pl.col("Especialidad") == ""))
+        .then(pl.col("Servicio_Corregido"))
     )
 
     entradas_de_facturacion = entradas_de_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
@@ -212,6 +240,7 @@ def cargar_datos(rutas: dict = None):
         .alias("Servicio_Corregido")
     )
 
+
     anulados_limpieza = limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_null()).select(
         ['Comprobante','Numero','Fecha','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','codigo', 'Nombre','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','ADM-CodGen','idadmision','nofactura','idusuario','nomtiposervicio']
     )
@@ -221,6 +250,10 @@ def cargar_datos(rutas: dict = None):
     #print(limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_not_null()))
     #print(limpieza_consumos_facturacion.shape)
 
+    limpieza_consumos_facturacion = limpieza_consumos_facturacion.with_columns(
+        pl.when((pl.col("Especialidad").is_null()) | (pl.col("Especialidad") == ""))
+        .then(pl.col("Servicio_Corregido"))
+    )
 
     consumos_de_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
         pl.col('ValorTotal').sum().cast(pl.Int64)
@@ -247,6 +280,22 @@ def cargar_datos(rutas: dict = None):
 
     print("✓ Limpieza de archivos completada con exito!!")
     #print(f"\n\nConsumos de facturación:\n{consumos_de_facturacion}")
+
+    try: 
+        pl.write_excel(
+            workbook= "D:\proyectos\Reportes_saludips\consumos\08\informes\reporte_consolidado.xlsx",
+            worksheet={
+                "Facturacion_consumos": consumos_de_facturacion,
+                "Limpieza consumos fact": limpieza_consumos_facturacion,
+                "consumo": salidas_consumo,
+                "entradas facturacion": entradas_de_facturacion,
+                "entradas consumo":entradas_consumo
+            }
+        )
+        print("Supuestamente ya hice el archivo de excel donde no se!!!!")
+    except Exception as e:
+        print(e)
+        print("NO SE REALIZO LA EXPORTACION ADECUADAMENTE")
 
     return consumos_de_facturacion, anulados_limpieza, limpieza_consumos_facturacion, salidas_consumo, entradas_de_facturacion, entradas_consumo
 

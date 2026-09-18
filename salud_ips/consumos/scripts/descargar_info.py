@@ -93,8 +93,8 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             page.get_by_role("textbox", name="Usuario").press("Tab")
             page.get_by_role("textbox", name="Password").fill("1087049780")
             page.get_by_role("textbox", name="Password").press("Tab")
-            page.get_by_title("Proinsalud S.A - Sede Cumbal").click()
-            page.get_by_role("treeitem", name="Proinsalud S.A - Sede Pasto").click()
+            page.get_by_title("Proinsalud S.A - Pasto Ambulatoria").click()
+            page.get_by_role("treeitem", name="Proinsalud S.A - Pasto Clínica").click()
             page.get_by_role("button", name="Iniciar sesión").click()
 
             # ── Descarga 1: Facturación ──
