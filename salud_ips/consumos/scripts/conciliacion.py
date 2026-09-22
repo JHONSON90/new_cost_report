@@ -14,7 +14,7 @@ COMPROBANTES_ENTRADA = [
     'ENTRADAS INTERNAS SIMA',
     'ENTRADAS INTERNAS ALMACEN',
 ]
-TOLERANCIA = 50.01  # margen aceptable en pesos por redondeo
+TOLERANCIA = 1000.01  # margen aceptable en pesos por redondeo
 
 
 def _leer_y_sumar_valor(

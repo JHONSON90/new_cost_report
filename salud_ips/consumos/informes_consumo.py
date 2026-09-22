@@ -75,6 +75,7 @@ class ConsumoPipeline:
         self.resultados_informe = None
         self.rentabilidad = None
         self.analisis_financiero = None
+        self.paraconciliacion = None
 
     def _crear_carpeta_informes(self, rutas=None) -> Path:
         """
@@ -127,7 +128,7 @@ class ConsumoPipeline:
         print("PASO 1: DESCARGA DE ARCHIVOS")
         print("=" * 60)
         try:
-            #rutas_para_no_descargar = {'facturacion': r'D:/proyectos/Reportes_saludips/consumos/07/Facturacion 07 2026.xlsx', 'salidas': r'D:/proyectos/Reportes_saludips/consumos/07/Informe consumos 07 Salidas.xlsx', 'entradas': r'D:/proyectos/Reportes_saludips/consumos/07/Informe consumos mes de 07 Entradas.xlsx', 'listado': r'D:/proyectos/Reportes_saludips/consumos/07/Listado_Productos 07.xlsx', 'mes_informe': '07', 'dest_dir': r'D:/proyectos/Reportes_saludips/consumos/07'}
+            #rutas_para_no_descargar = {'facturacion': r'D:/proyectos/Reportes_saludips/consumos/08/Facturacion 08 2026.xlsx', 'salidas': r'D:/proyectos/Reportes_saludips/consumos/08/Informe consumos 08 Salidas.xlsx', 'entradas': r'D:/proyectos/Reportes_saludips/consumos/08/Informe consumos mes de 08 Entradas.xlsx', 'listado': r'D:/proyectos/Reportes_saludips/consumos/08/Listado_Productos 08.xlsx', 'mes_informe': '08', 'dest_dir': r'D:/proyectos/Reportes_saludips/consumos/08'}
             self.rutas_descargadas = ejecutar_descarga(self.fecha_inicio, self.fecha_fin)
             #self.rutas_descargadas = rutas_para_no_descargar
             print(f"✓ Paso 1 completado. Archivos: {list(self.rutas_descargadas.keys())}")
@@ -160,7 +161,8 @@ class ConsumoPipeline:
              self.limpieza_consumos_facturacion, 
              self.salidas_consumo,
              self.entradas_facturacion,
-             self.entradas_consumo
+             self.entradas_consumo,
+             self.paraconciliacion
              ) = cargar_datos(rutas_a_usar)
 
             print(f"✓ Paso 2 completado.")
@@ -170,6 +172,7 @@ class ConsumoPipeline:
             print(f"  - salidas_consumos: {self.salidas_consumo.shape} - {self.salidas_consumo.select('ValorTotal').sum().item():,.0f}")
             print(f"  - Entradas Facturacion: {self.entradas_facturacion.shape} - {self.entradas_facturacion.select('ValorTotal').sum().item():,.0f}")
             print(f"  - Entradas consumo: {self.entradas_consumo.shape} - {self.entradas_consumo.select('ValorTotal').sum().item():,.0f}")
+            print(f"  - paraconciliacion: {self.paraconciliacion.shape} - {self.paraconciliacion.select('ValorTotal').sum().item():,.0f}")
 
             ruta_informes = self.ruta_informes or self._crear_carpeta_informes()
             nombre_archivo = f"Medicos nullos {self._rango_fechas_archivo()}.xlsx"
@@ -178,7 +181,7 @@ class ConsumoPipeline:
             self.anulados_limpieza.write_excel(str(ruta_salida))
             print(f"✓ Inconsistencias guardadas en: {ruta_salida}")
 
-            return (self.consumos_de_facturacion, self.anulados_limpieza, self.limpieza_consumos_facturacion, self.salidas_consumo, self.entradas_facturacion, self.entradas_consumo)
+            return (self.consumos_de_facturacion, self.anulados_limpieza, self.limpieza_consumos_facturacion, self.salidas_consumo, self.entradas_facturacion, self.entradas_consumo, self.paraconciliacion)
         except Exception as e:
             print(f"✗ Error en Paso 2 (Carga): {e}")
             traceback.print_exc()
@@ -292,12 +295,12 @@ class ConsumoPipeline:
 
     # ── Paso 6: Generación de informe de rentabilidad ──
 
-    def informe_rentabilidad(self, consumos_de_facturacion: pl.DataFrame = None, entradas_facturacion: pl.DataFrame = None) -> pl.DataFrame:
+    def informe_rentabilidad(self, paraconciliacion: pl.DataFrame = None, entradas_facturacion: pl.DataFrame = None) -> pl.DataFrame:
         print("\n" + "=" * 60)
         print("PASO 6: GENERACIÓN DE INFORME DE RENTABILIDAD")
         print("=" * 60)
         try:
-            datos_limpios = consumos_de_facturacion if consumos_de_facturacion is not None else self.consumos_de_facturacion
+            datos_limpios = paraconciliacion if paraconciliacion is not None else self.paraconciliacion
             datos_devoluciones = entradas_facturacion if entradas_facturacion is not None else self.entradas_facturacion
             
             if datos_limpios is None:

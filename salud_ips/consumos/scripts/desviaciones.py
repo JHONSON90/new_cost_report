@@ -94,7 +94,7 @@ def desviaciones(consumos: pl.DataFrame) -> pl.DataFrame:
             print("[WARN] No hay datos válidos para calcular desviaciones.")
             # Retornar DataFrame vacío con esquema correcto
             return pl.DataFrame({
-                'Comprobante': [], 'Numero': [], 'Fecha': [], 'NoDocumento': [],
+                'Comprobante': [], 'Fecha': [], 'NoDocumento': [],
                 'CentroCosto': [], 'Dependencia': [], 'Bodega': [], 'CodGrupo': [], 'Grupo': [],
                 'CodigoGenerico': [], 'Nombre': [], 'Cantidad': [], 'ValorTotal': [],
                 'Cantidad_moda': [], 'Cantidad_maximo': [], 'Cantidad_media': [],
@@ -134,7 +134,7 @@ def desviaciones(consumos: pl.DataFrame) -> pl.DataFrame:
         )
         
         # 5. SELECCIÓN COLUMNAS CANÓNICAS
-        cols_out = ['Comprobante', 'Numero', 'Fecha', 'NoDocumento','CentroCosto', 
+        cols_out = ['Comprobante', 'Fecha', 'NoDocumento','CentroCosto', 
                     'Dependencia', 'Bodega', 'CodGrupo', 'Grupo', "CodigoGenerico", "Nombre",
                     'Cantidad','ValorTotal','Cantidad_moda','Cantidad_maximo','Cantidad_media',
                     'Cantidad_std','Cantidad_minimo','Desviacion_moda','Desviacion_media',

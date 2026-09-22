@@ -137,7 +137,7 @@ def cargar_datos(rutas: dict = None):
     
     consumos_facturacion = consumos_facturacion.with_columns(
         pl.col("CodigoGenerico").cast(pl.Int64)
-    ).group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+    ).group_by(['Comprobante', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
         pl.col('Cantidad').sum().alias('Cantidad'),
         pl.col('ValorUnitario').mean().alias('ValorUnitario'),
         pl.col('TotalBruto').sum().alias('TotalBruto'),
@@ -149,7 +149,7 @@ def cargar_datos(rutas: dict = None):
 
     entradas_de_facturacion = entradas_de_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left")
 
-    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Numero', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
         pl.col('Cantidad').sum().alias('Cantidad'),
         pl.col('ValorUnitario').mean().alias('ValorUnitario'),
         pl.col('TotalBruto').sum().alias('TotalBruto'),
@@ -242,7 +242,7 @@ def cargar_datos(rutas: dict = None):
 
 
     anulados_limpieza = limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_null()).select(
-        ['Comprobante','Numero','Fecha','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','codigo', 'Nombre','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','ADM-CodGen','idadmision','nofactura','idusuario','nomtiposervicio']
+        ['Comprobante','Fecha','CentroCosto','Dependencia','Bodega','CodGrupo','Grupo','codigo', 'Nombre','Cantidad','ValorUnitario','TotalBruto','ValorIVA','ValorDescuento','ValorTotal','ADM-CodGen','idadmision','nofactura','idusuario','nomtiposervicio', "Servicio"]
     )
     #print(f"\n\nAnulados: \n{anulados_limpieza}")
     #para pasar a facturacion y solicitar cerrar esas facturas
@@ -255,11 +255,11 @@ def cargar_datos(rutas: dict = None):
         .then(pl.col("Servicio_Corregido"))
     )
 
-    consumos_de_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad"]).agg(
-        pl.col('ValorTotal').sum().cast(pl.Int64)
-    )
+    # limpieza_consumos_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad", "Servicio"]).agg(
+    #     pl.col('ValorTotal').sum().cast(pl.Int64)
+    # )
 
-    consumos_de_facturacion = limpieza_consumos_facturacion.with_columns(
+    limpieza_consumos_facturacion = limpieza_consumos_facturacion.with_columns(
         pl.when(pl.col("Servicio_Corregido").is_in(["consultas generales", "consultas especializadas"]))
         .then(pl.col('Especialidad'))
         .otherwise(pl.col('Servicio_Corregido'))
@@ -267,6 +267,8 @@ def cargar_datos(rutas: dict = None):
     )
 
     consumos_de_facturacion = limpieza_consumos_facturacion.clone()
+
+    paraconciliacion = consumos_with_fact.clone()
 
 
     salidas_consumo = consumos_lectura_1.filter(
@@ -281,21 +283,22 @@ def cargar_datos(rutas: dict = None):
     print("✓ Limpieza de archivos completada con exito!!")
     #print(f"\n\nConsumos de facturación:\n{consumos_de_facturacion}")
 
-    try: 
-        pl.write_excel(
-            workbook= "D:\proyectos\Reportes_saludips\consumos\08\informes\reporte_consolidado.xlsx",
-            worksheet={
-                "Facturacion_consumos": consumos_de_facturacion,
-                "Limpieza consumos fact": limpieza_consumos_facturacion,
-                "consumo": salidas_consumo,
-                "entradas facturacion": entradas_de_facturacion,
-                "entradas consumo":entradas_consumo
-            }
-        )
-        print("Supuestamente ya hice el archivo de excel donde no se!!!!")
-    except Exception as e:
-        print(e)
-        print("NO SE REALIZO LA EXPORTACION ADECUADAMENTE")
+    # try: 
+    #     pl.write_excel(
+    #         workbook= "D:\proyectos\Reportes_saludips\consumos\08\informes\reporte_consolidado.xlsx",
+    #         worksheet={
+    #             "Facturacion_consumos": consumos_de_facturacion,
+    #             "Limpieza consumos fact": limpieza_consumos_facturacion,
+    #             "consumo": salidas_consumo,
+    #             "entradas facturacion": entradas_de_facturacion,
+    #             "entradas consumo":entradas_consumo,
+    #             "paraconciliacion": paraconciliacion
+    #         }
+    #     )
+    #     print("Supuestamente ya hice el archivo de excel donde no se!!!!")
+    # except Exception as e:
+    #     print(e)
+    #     print("NO SE REALIZO LA EXPORTACION ADECUADAMENTE")
 
-    return consumos_de_facturacion, anulados_limpieza, limpieza_consumos_facturacion, salidas_consumo, entradas_de_facturacion, entradas_consumo
+    return consumos_de_facturacion, anulados_limpieza, limpieza_consumos_facturacion, salidas_consumo, entradas_de_facturacion, entradas_consumo, paraconciliacion
 
