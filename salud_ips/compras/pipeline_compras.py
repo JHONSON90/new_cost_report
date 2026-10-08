@@ -12,6 +12,12 @@ from pathlib import Path
 import sys
 import time
 import traceback
+import xlsxwriter
+from datetime import datetime
+
+import polars as pl
+import pandas as pd
+
 
 # Configurar resolución de rutas en sys.path para ejecución directa (botón 'Play')
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,8 +36,6 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-import polars as pl
-
 # ──────────────────────────────────────────────
 # Imports de los módulos del pipeline
 # ──────────────────────────────────────────────
@@ -40,6 +44,7 @@ from scripts.lectura_archivos import lectura_archivos_completa
 from scripts.procesamiento import procesamiento
 from scripts.compras import Analizando_compras
 from scripts.saldos_prestamos import analisis_prestamos
+from scripts.movimiento_producto import analisis_movimientos_completos
 
 
 # ══════════════════════════════════════════════
@@ -70,6 +75,39 @@ class ComprasPipeline:
         self.df_neto_consumos: pl.DataFrame | None = None
         self.datos_procesados: dict[str, pl.DataFrame] | None = None
         self.resultados_compras: dict[str, pl.DataFrame] | None = None
+        self.detallado: pl.DataFrame | None = None
+        self.agrupado: pl.DataFrame | None = None
+        self.prestamos_realizados_analizados: pl.DataFrame | None = None
+        self.prestamos_recibidos_analizados: pl.DataFrame | None = None
+        self.df_prestamos_netos: dict[str, pl.DataFrame] | None = None
+        self.df_movimientos_completos: dict[str, pl.DataFrame] | None = None
+
+    def _exportar_a_excel(self, dfs_dict: dict[str, pl.DataFrame], ruta_archivo: str | Path):
+        """Helper robusto para exportar diccionarios de DataFrames de Polars a Excel."""
+        import xlsxwriter
+        ruta = Path(ruta_archivo)
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Manejo de archivo bloqueado
+        try:
+            with open(ruta, "a"):
+                pass
+        except PermissionError:
+            print(f"⚠ Advertencia: El archivo {ruta.name} está abierto o bloqueado.")
+            sufijo = datetime.now().strftime("%H%M%S")
+            ruta = ruta.with_name(f"{ruta.stem}_{sufijo}{ruta.suffix}")
+            print(f"  -> Guardando con nuevo nombre: {ruta.name}")
+
+        try:
+            with xlsxwriter.Workbook(str(ruta)) as wb:
+                for nombre_sheet, df in dfs_dict.items():
+                    safe_name = nombre_sheet[:31]
+                    df.write_excel(workbook=wb, worksheet=safe_name, autofit=True, table_style="Table Style Light 1")
+            print(f"✓ Guardado exitoso en: {ruta}")
+            print(f"  - Hojas: {list(dfs_dict.keys())}")
+        except Exception as e:
+            print(f"✗ Error guardando Excel en {ruta}: {e}")
+            raise
 
     def paso1_consolidacion(self) -> pl.DataFrame:
         """Paso 1: Ejecuta la lectura y consolidación diagonal de todos los archivos."""
@@ -110,6 +148,14 @@ class ComprasPipeline:
         """Paso 3: Ejecuta los cálculos analíticos de compras reutilizando los datos procesados."""
         try:
             self.resultados_compras = Analizando_compras(self.df_compras_aprovechamientos)
+            
+            ruta_informe = Path(r"D:\proyectos\Reportes_saludips\Compras\Para Analizar")
+            nombre_archivo = f'Informe de compras {datetime.now().strftime("%Y-%m-%d")}.xlsx'
+            ruta_completa = ruta_informe / nombre_archivo
+            
+            if self.resultados_compras:
+                self._exportar_a_excel(self.resultados_compras, ruta_completa)
+                
             total_entregables = len(self.resultados_compras) if self.resultados_compras else 0
             print(f"✓ Paso 3 completado exitosamente: {total_entregables} entregables de análisis generados.")
             return self.resultados_compras
@@ -118,10 +164,23 @@ class ComprasPipeline:
             traceback.print_exc()
             raise
 
-    def paso4_analisis_prestamos(self) -> pl.DataFrame:
-        """Paso 4: Ejecuta los cálculos analíticos de compras reutilizando los datos procesados."""
+    def paso4_analisis_prestamos(self) -> dict[str, pl.DataFrame]:
+        """Paso 4: Ejecuta los cálculos analíticos de prestamos reutilizando los datos procesados."""
         try:
             self.df_prestamos_netos = analisis_prestamos(self.df_neto_prestamos_realizados, self.df_neto_prestamos_recibidos)
+            self.prestamos_realizados_analizados = self.df_prestamos_netos.get('prestamos_realizados')
+            self.prestamos_recibidos_analizados = self.df_prestamos_netos.get('prestamos_recibidos')
+            
+            ruta_informe = Path(r"D:\proyectos\Reportes_saludips\Compras\Para Analizar")
+            nombre_archivo = f'Informe de prestamos {datetime.now().strftime("%Y-%m-%d")}.xlsx'
+            ruta_completa = ruta_informe / nombre_archivo
+            
+            if self.df_prestamos_netos:
+                self._exportar_a_excel(self.df_prestamos_netos, ruta_completa)
+            else:
+                print("✗ Error: No hay datos de prestamos para analizar.")
+                return {}
+            
             total_entregables = len(self.df_prestamos_netos) if self.df_prestamos_netos else 0
             print(f"✓ Paso 4 completado exitosamente: {total_entregables} entregables de análisis generados.")
             return self.df_prestamos_netos
@@ -129,7 +188,25 @@ class ComprasPipeline:
             print(f"✗ Error en Paso 4 (Análisis de prestamos): {e}")
             traceback.print_exc()
             raise
-        
+
+    def paso5_analisis_movimientos(self) -> dict[str, pl.DataFrame]:
+        """ Paso 5: Ejecuta el analisis de que si las compras cubren el movimiento de la operacion completa"""
+        try:
+            self.df_movimientos_completos = analisis_movimientos_completos(self.df_neto_compras, self.df_neto_mov_iniciales, self.df_neto_ajustes, self.df_neto_prestamos_realizados, self.df_neto_prestamos_recibidos, self.df_neto_consumos, self.df_neto_traslados)
+            ruta_informe = Path(r"D:\proyectos\Reportes_saludips\Compras\Para Analizar")
+            nombre_archivo = f'Informe de movimientos {datetime.now().strftime("%Y-%m-%d")}.xlsx'
+            ruta_completa = ruta_informe / nombre_archivo
+            
+            if self.df_movimientos_completos:
+                self._exportar_a_excel(self.df_movimientos_completos, ruta_completa)
+            
+            total_entregables = len(self.df_movimientos_completos) if self.df_movimientos_completos else 0
+            print(f"✓ Paso 5 completado exitosamente: {total_entregables} entregables de análisis generados.")
+            return self.df_movimientos_completos
+        except Exception as e:
+            print(f"✗ Error en Paso 5 (Análisis de movimientos): {e}")
+            traceback.print_exc()
+            raise
 
     def ejecutar(self) -> dict:
         """
@@ -148,6 +225,7 @@ class ComprasPipeline:
             'paso_2_procesamiento': None,
             'paso_3_analisis_compras': None,
             'paso_4_analisis_prestamos': None,
+            'paso_5_analisis_movimientos': None,
             'exitoso': False,
         }
 
@@ -163,6 +241,9 @@ class ComprasPipeline:
 
             # Paso 4: Análisis de prestamos
             resultados['paso_4_analisis_prestamos'] = self.paso4_analisis_prestamos()
+
+            # Paso 5: Análisis de movimientos completos
+            resultados['paso_5_analisis_movimientos'] = self.paso5_analisis_movimientos()
 
             resultados['exitoso'] = True
             duracion = time.time() - t_inicio

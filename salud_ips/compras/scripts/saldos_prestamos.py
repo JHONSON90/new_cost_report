@@ -3,12 +3,12 @@ import sys
 from pathlib import Path
 import polars as pl
 
-# Asegurar codificación utf-8 en consola para Windows
-if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+# # Asegurar codificación utf-8 en consola para Windows
+# if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+#     try:
+#         sys.stdout.reconfigure(encoding="utf-8")
+#     except Exception:
+#         pass
 
 # Importación relativa y absoluta tolerante
 try:
@@ -39,16 +39,16 @@ def analisis_prestamos(prestamos_realizados: pl.DataFrame, prestamos_recibidos: 
     print("PASO 4: ANÁLISIS DE PRESTAMOS REALIZADOS Y RECIBIDOS")
     print("=" * 60)
 
-    # Si no se suministran datos procesados, se invoca el paso previo
-    if datos_procesados is None:
-        print("ℹ No se recibieron datos procesados; ejecutando procesamiento()...")
-        datos_procesados = procesamiento()
+    # # Si no se suministran datos procesados, se invoca el paso previo
+    # if datos_procesados is None:
+    #     print("ℹ No se recibieron datos procesados; ejecutando procesamiento()...")
+    #     datos_procesados = procesamiento()
 
-    prestamos_realizados = datos_procesados.get("neto_prestamos_realizados")
-    prestamos_recibidos = datos_procesados.get("neto_prestamos_recibidos")
-    if prestamos_realizados is None or prestamos_realizados.is_empty() or prestamos_recibidos is None or prestamos_recibidos.is_empty():
-        print("⚠ Advertencia: No hay registros de prestamos realizados y recibidos para analizar.")
-        return {}
+    # prestamos_realizados = datos_procesados.get("neto_prestamos_realizados")
+    # prestamos_recibidos = datos_procesados.get("neto_prestamos_recibidos")
+    # if prestamos_realizados is None or prestamos_realizados.is_empty() or prestamos_recibidos is None or prestamos_recibidos.is_empty():
+    #     print("⚠ Advertencia: No hay registros de prestamos realizados y recibidos para analizar.")
+    #     return {}
 
     print("Comenzando el análisis de prestamos...")
 
@@ -94,17 +94,17 @@ def analisis_prestamos(prestamos_realizados: pl.DataFrame, prestamos_recibidos: 
 # hasta el final) fácilmente, dejando el código completamente limpio
 # para que la ejecución se haga únicamente desde pipeline_compras.py.
 # =====================================================================
-if __name__ == "__main__":
-    print("\n" + "▶" * 30 + " MODO DE PRUEBAS LOCALES (COMPRAS.PY) " + "◀" * 30)
+# if __name__ == "__main__":
+#     print("\n" + "▶" * 30 + " MODO DE PRUEBAS LOCALES (COMPRAS.PY) " + "◀" * 30)
 
-    # 1. Ejecutar análisis completo (se invocan automáticamente Paso 1 y Paso 2)
-    resultados = analisis_prestamos()
+#     # 1. Ejecutar análisis completo (se invocan automáticamente Paso 1 y Paso 2)
+#     resultados = analisis_prestamos()
 
-    # 2. Inspeccionar los resultados de cada entregable
-    print("\n" + "=" * 60)
-    print("RESUMEN DE ENTREGABLES OBTENIDOS")
-    print("=" * 60)
-    for nombre, df in resultados.items():
-        print(f"\n★ Entregable: [{nombre}]")
-        print(f"  Dimensiones: {df.shape[0]:,} filas x {df.shape[1]} columnas")
-    print("\n" + "▶" * 30 + " PRUEBA LOCAL FINALIZADA EXITOSAMENTE " + "◀" * 30)
+#     # 2. Inspeccionar los resultados de cada entregable
+#     print("\n" + "=" * 60)
+#     print("RESUMEN DE ENTREGABLES OBTENIDOS")
+#     print("=" * 60)
+#     for nombre, df in resultados.items():
+#         print(f"\n★ Entregable: [{nombre}]")
+#         print(f"  Dimensiones: {df.shape[0]:,} filas x {df.shape[1]} columnas")
+#     print("\n" + "▶" * 30 + " PRUEBA LOCAL FINALIZADA EXITOSAMENTE " + "◀" * 30)

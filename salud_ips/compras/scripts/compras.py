@@ -53,8 +53,6 @@ def Analizando_compras(df_compras_aprovechamientos: pl.DataFrame):
         .alias("valor_unitario_calculado")
     )
 
-    compras_proveedor.write_csv("analizando_compras_proveedor 2.csv")
-
     idx_compras = ["Fecha", "Bodega", "CodigoGenerico", "GrupoInventario", "Generico", "Tercero", "Mes"]
 
     compras_proveedor = compras_proveedor.pivot(

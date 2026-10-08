@@ -90,7 +90,10 @@ def procesamiento(
     ajustes = datos.filter(
         pl.col("Comprobante_corregido").is_in([
             'EAS - ENTRADAS AJUSTES SOBRANTES',
-            'SAF - SALIDAS AJUSTES FALTANTES'
+            'SAF - SALIDAS AJUSTES FALTANTES',
+            'EASC - ENTRADAS AJUSTES SOBRANTES CONTEO',
+            'SAFC - SALIDAS AJUSTES FALTANTES CONTEO'
+
         ])
     )
 
