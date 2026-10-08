@@ -31,9 +31,7 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
     consumos_facturacion = facturacion.clone().with_columns(
         pl.when(pl.col('Servicio_Corregido').is_in(['pym', 'cronicos', 'terapias oncologicas', 'servicio farmaceutico']))
         .then(pl.col('Servicio_Corregido'))
-        .when((pl.col('Servicio_Corregido').is_in(['pym', 'cronicos'])) & (pl.col("Especialidad") == "MEDICINA GENERAL"))
-        .then(pl.col('Servicio_Corregido'))
-        .when((pl.col("Especialidad").is_empty()) | (pl.col("Especialidad").is_null()))
+        .when((pl.col("Especialidad") == "") | (pl.col("Especialidad").is_null()))
         .then(pl.col('Servicio_Corregido'))
         .otherwise(pl.col('Especialidad'))
         .alias('Especialidad_Corregida')
@@ -98,9 +96,7 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
     devolucion_facturacion = entrada_facturacion.clone().with_columns(
         pl.when(pl.col('Servicio_Corregido').is_in(['pym', 'cronicos', 'terapias oncologicas', 'servicio farmaceutico']))
         .then(pl.col('Servicio_Corregido'))
-        .when((pl.col('Servicio_Corregido').is_in(['pym', 'cronicos'])) & (pl.col("Especialidad") == "MEDICINA GENERAL"))
-        .then(pl.col('Servicio_Corregido'))
-        .when((pl.col("Especialidad").is_empty()) | (pl.col("Especialidad").is_null()))
+        .when((pl.col("Especialidad") == "") | (pl.col("Especialidad").is_null()))
         .then(pl.col('Servicio_Corregido'))
         .otherwise(pl.col('Especialidad'))
         .alias('Especialidad_Corregida')
@@ -139,64 +135,71 @@ def hacer_informe(facturacion, entrada_facturacion, consumos, entradas_consumos)
             pl.concat_str(['Municipio', 'Especialidad_Corregida'], separator='-').alias('Centro Costo')
         )
 
-    consumos_medicamentos_sin_entradas = consumo_medicamentos.join(consumo_entradas_medicamentos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
-    consumos_dispositivos_sin_entradas = consumo_dispositivos.join(consumo_entradas_dispositivos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
-    consumos_suministros_sin_entradas = consumo_suministros.join(consumo_entradas_suministros, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
-
-    facturacion_medicamentos_sin_devolucion = servicio_farmaceutico_medicamentos.join(devolucion_fact_medicamentos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
-    facturacion_medicamentos_sin_devolucion = facturacion_medicamentos_sin_devolucion.with_columns(
-        pl.when((pl.col("Municipio").is_null()) | (pl.col("Municipio") == ""))
-        .then(pl.col("Municipio_right"))
+    consumos_medicamentos_sin_entradas = consumo_medicamentos.join(
+        consumo_entradas_medicamentos, left_on='Centro Costo', right_on='Centro Costo', how='full'
     ).with_columns(
-        pl.when((pl.col("Especialidad_Corregida").is_null()) | (pl.col("Especialidad_Corregida") == ""))
-        .then(pl.col("Especialidad_Corregida_right"))
-    )
-    # facturacion_medicamentos_sin_devolucion.write_csv("facturacion_medicamentos_sin_devoluciones.csv")
-    # with pl.Config(tbl_cols=-1, tbl_width_chars=1000):
-    #     print(facturacion_medicamentos_sin_devolucion.tail(10))
-    facturacion_dispositivos_sin_devolucion = servicio_farmaceutico_dispositivos.join(devolucion_fact_dispositivos, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
-    facturacion_dispositivos_sin_devolucion = facturacion_dispositivos_sin_devolucion.with_columns(
-        pl.when((pl.col("Municipio").is_null()) | (pl.col("Municipio") == ""))
-        .then(pl.col("Municipio_right"))
+        pl.coalesce([pl.col("Municipio"), pl.col("Municipio_right")]).alias("Municipio"),
+        pl.coalesce([pl.col("Servicio"), pl.col("Servicio_right")]).alias("Servicio"),
+        (pl.col('ValorTotal').fill_null(0) - pl.col('ValorTotal_right').fill_null(0)).alias('ValorNeto')
+    ).select(['Municipio', 'Servicio', 'ValorNeto'])
+
+    consumos_dispositivos_sin_entradas = consumo_dispositivos.join(
+        consumo_entradas_dispositivos, left_on='Centro Costo', right_on='Centro Costo', how='full'
     ).with_columns(
-        pl.when((pl.col("Especialidad_Corregida").is_null()) | (pl.col("Especialidad_Corregida") == ""))
-        .then(pl.col("Especialidad_Corregida_right"))
-    )
-    
-    facturacion_suministros_sin_devolucion = servicio_farmaceutico_suministros.join(devolucion_fact_suministros, left_on='Centro Costo', right_on='Centro Costo', how='full').fill_null(0)
-
-    consumos_medicamentos_sin_entradas = consumos_medicamentos_sin_entradas.with_columns(
-        (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
+        pl.coalesce([pl.col("Municipio"), pl.col("Municipio_right")]).alias("Municipio"),
+        pl.coalesce([pl.col("Servicio"), pl.col("Servicio_right")]).alias("Servicio"),
+        (pl.col('ValorTotal').fill_null(0) - pl.col('ValorTotal_right').fill_null(0)).alias('ValorNeto')
     ).select(['Municipio', 'Servicio', 'ValorNeto'])
 
-    consumos_dispositivos_sin_entradas = consumos_dispositivos_sin_entradas.with_columns(
-        (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
+    consumos_suministros_sin_entradas = consumo_suministros.join(
+        consumo_entradas_suministros, left_on='Centro Costo', right_on='Centro Costo', how='full'
+    ).with_columns(
+        pl.coalesce([pl.col("Municipio"), pl.col("Municipio_right")]).alias("Municipio"),
+        pl.coalesce([pl.col("Servicio"), pl.col("Servicio_right")]).alias("Servicio"),
+        (pl.col('ValorTotal').fill_null(0) - pl.col('ValorTotal_right').fill_null(0)).alias('ValorNeto')
     ).select(['Municipio', 'Servicio', 'ValorNeto'])
 
-    consumos_suministros_sin_entradas = consumos_suministros_sin_entradas.with_columns(
-        (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).select(['Municipio', 'Servicio', 'ValorNeto'])
+    facturacion_medicamentos_sin_devolucion = servicio_farmaceutico_medicamentos.join(
+        devolucion_fact_medicamentos, left_on='Centro Costo', right_on='Centro Costo', how='full'
+    ).with_columns(
+        pl.coalesce([pl.col("Municipio"), pl.col("Municipio_right")]).alias("Municipio"),
+        pl.coalesce([pl.col("Especialidad_Corregida"), pl.col("Especialidad_Corregida_right")]).alias("Especialidad_Corregida"),
+        (pl.col('ValorTotal').fill_null(0) - pl.col('ValorTotal_right').fill_null(0)).alias('ValorNeto')
+    ).group_by(['Municipio', 'Especialidad_Corregida']).agg(
+        pl.col('ValorNeto').sum()
+    ).select([
+        'Municipio', 
+        pl.col('Especialidad_Corregida').alias("Servicio"),
+        'ValorNeto'
+    ])
 
-    facturacion_medicamentos_sin_devolucion = facturacion_medicamentos_sin_devolucion.with_columns(
-        (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).group_by(['Municipio', 'Especialidad_Corregida']).agg(pl.col('ValorNeto').sum()
-    ).select(['Municipio', 
-    pl.col('Especialidad_Corregida').alias("Servicio"),
-    'ValorNeto'])
+    facturacion_dispositivos_sin_devolucion = servicio_farmaceutico_dispositivos.join(
+        devolucion_fact_dispositivos, left_on='Centro Costo', right_on='Centro Costo', how='full'
+    ).with_columns(
+        pl.coalesce([pl.col("Municipio"), pl.col("Municipio_right")]).alias("Municipio"),
+        pl.coalesce([pl.col("Especialidad_Corregida"), pl.col("Especialidad_Corregida_right")]).alias("Especialidad_Corregida"),
+        (pl.col('ValorTotal').fill_null(0) - pl.col('ValorTotal_right').fill_null(0)).alias('ValorNeto')
+    ).group_by(['Municipio', 'Especialidad_Corregida']).agg(
+        pl.col('ValorNeto').sum()
+    ).select([
+        'Municipio', 
+        pl.col('Especialidad_Corregida').alias("Servicio"),
+        'ValorNeto'
+    ])
 
-    facturacion_dispositivos_sin_devolucion = facturacion_dispositivos_sin_devolucion.with_columns(
-        (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).group_by(['Municipio', 'Especialidad_Corregida']).agg(pl.col('ValorNeto').sum()
-    ).select(['Municipio', 
-    pl.col('Especialidad_Corregida').alias("Servicio"),
-    'ValorNeto'])
-
-    facturacion_suministros_sin_devolucion = facturacion_suministros_sin_devolucion.with_columns(
-        (pl.col('ValorTotal') - pl.col('ValorTotal_right')).alias('ValorNeto')
-    ).group_by(['Municipio', 'Especialidad_Corregida']).agg(pl.col('ValorNeto').sum()
-    ).select(['Municipio', 
-    pl.col('Especialidad_Corregida').alias("Servicio"),
-    'ValorNeto'])
+    facturacion_suministros_sin_devolucion = servicio_farmaceutico_suministros.join(
+        devolucion_fact_suministros, left_on='Centro Costo', right_on='Centro Costo', how='full'
+    ).with_columns(
+        pl.coalesce([pl.col("Municipio"), pl.col("Municipio_right")]).alias("Municipio"),
+        pl.coalesce([pl.col("Especialidad_Corregida"), pl.col("Especialidad_Corregida_right")]).alias("Especialidad_Corregida"),
+        (pl.col('ValorTotal').fill_null(0) - pl.col('ValorTotal_right').fill_null(0)).alias('ValorNeto')
+    ).group_by(['Municipio', 'Especialidad_Corregida']).agg(
+        pl.col('ValorNeto').sum()
+    ).select([
+        'Municipio', 
+        pl.col('Especialidad_Corregida').alias("Servicio"),
+        'ValorNeto'
+    ])
 
     #union facturacion con consumos
     medicamentos_completo = pl.concat([

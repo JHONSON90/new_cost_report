@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Ejecutar Pipeline Consumos",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/salud_ips/consumos/informes_consumo.py",
+      "console": "integratedTerminal",
+      "args": ["1-09-2026", "30-09-2026"]
+    },
+    {
+      "name": "Python: Archivo actual (Terminal Integrada)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

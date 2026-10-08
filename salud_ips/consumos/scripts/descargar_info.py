@@ -11,6 +11,26 @@ import sys
 # ──────────────────────────────────────────────
 RUTA_BASE_REPORTES = Path(r"D:\proyectos\Reportes_saludips\consumos")
 
+from datetime import datetime
+
+def normalizar_fecha(fecha_str: str) -> tuple[str, str]:
+    """
+    Normaliza una fecha string (ej. 1/9/2026, 01-09-2026) a formato DD/MM/AAAA
+    y extrae el mes en dos dígitos (ej. 09).
+    """
+    fecha_limpia = fecha_str.strip().replace("-", "/")
+    partes = fecha_limpia.split("/")
+    if len(partes) != 3:
+        raise ValueError(f"Formato de fecha inválido (se esperaba D/M/A): {fecha_str}")
+    
+    dia, mes, anio = int(partes[0]), int(partes[1]), int(partes[2])
+    dt = datetime(anio, mes, dia)
+    
+    fecha_formateada = dt.strftime("%d/%m/%Y")
+    mes_formateado = dt.strftime("%m")
+    
+    return fecha_formateada, mes_formateado
+
 
 def obtener_fechas_usuario() -> tuple:
     """Solicita o recibe las fechas de inicio y fin del reporte."""
@@ -35,11 +55,14 @@ def obtener_fechas_usuario() -> tuple:
             if val_fin:
                 fecha_fin = val_fin
         
-        except Exception:
+        except Exception as e:
             # En entornos no interactivos o si falla el input, usar valores por defecto
-            pass
+            print(f"\n[Aviso] No se detectó entrada interactiva ({type(e).__name__}). Se usarán las fechas por defecto o puede pasarlas como argumentos (ej: python script.py 01/09/2026 30/09/2026).")
         print(f"Fechas seleccionadas: Inicio={fecha_inicio}, Fin={fecha_fin}\n")
-    mes_Informe = fecha_inicio[3:5]
+        
+    fecha_inicio, mes_Informe = normalizar_fecha(fecha_inicio)
+    fecha_fin, _ = normalizar_fecha(fecha_fin)
+    
     return fecha_inicio, fecha_fin, mes_Informe
 
 
@@ -71,7 +94,8 @@ def ejecutar_descarga(fecha_inicio: str, fecha_fin: str) -> dict:
             - 'mes_informe': Mes del informe (str).
             - 'dest_dir': Path del directorio destino.
     """
-    mes_informe = fecha_inicio[3:5]
+    fecha_inicio, mes_informe = normalizar_fecha(fecha_inicio)
+    fecha_fin, _ = normalizar_fecha(fecha_fin)
     
     # Validar ruta destino antes de iniciar el browser
     dest_dir = _validar_ruta_destino(RUTA_BASE_REPORTES, mes_informe)

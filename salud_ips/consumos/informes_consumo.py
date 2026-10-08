@@ -20,7 +20,7 @@ import pandas as pd
 # ──────────────────────────────────────────────
 # Imports de los módulos del pipeline
 # ──────────────────────────────────────────────
-from scripts.descargar_info import ejecutar_descarga, obtener_fechas_usuario
+from scripts.descargar_info import ejecutar_descarga, obtener_fechas_usuario, normalizar_fecha
 from scripts.lectura_proceso import cargar_datos
 from scripts.revision_informes import revisiones
 from scripts.desviaciones import desviaciones
@@ -57,9 +57,8 @@ class ConsumoPipeline:
             fecha_inicio: Fecha inicio en formato DD/MM/AAAA.
             fecha_fin: Fecha fin en formato DD/MM/AAAA.
         """
-        self.fecha_inicio = fecha_inicio
-        self.fecha_fin = fecha_fin
-        self.mes_informe = fecha_inicio[3:5]
+        self.fecha_inicio, self.mes_informe = normalizar_fecha(fecha_inicio)
+        self.fecha_fin, _ = normalizar_fecha(fecha_fin)
 
         # Resultados intermedios de cada paso
         self.rutas_descargadas: dict = {}

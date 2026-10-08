@@ -137,7 +137,7 @@ def cargar_datos(rutas: dict = None):
     
     consumos_facturacion = consumos_facturacion.with_columns(
         pl.col("CodigoGenerico").cast(pl.Int64)
-    ).group_by(['Comprobante', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+    ).group_by(['Comprobante', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
         pl.col('Cantidad').sum().alias('Cantidad'),
         pl.col('ValorUnitario').mean().alias('ValorUnitario'),
         pl.col('TotalBruto').sum().alias('TotalBruto'),
@@ -149,7 +149,7 @@ def cargar_datos(rutas: dict = None):
 
     entradas_de_facturacion = entradas_de_facturacion.join(listado_productos, left_on="CodArticulo", right_on="Codigo", how="left")
 
-    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'Usuario', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
+    entradas_de_facturacion = entradas_de_facturacion.group_by(['Comprobante', 'Fecha', 'NoDocumento', 'Proveedor', 'CentroCosto', 'Dependencia', 'Bodega', 'Unidad', 'User', 'FechaDigitacion', 'field_1', 'Clasificacion_consumo', 'Municipio', 'Servicio', 'Tipo_servicio', 'Nombre', 'CodGrupo', 'Grupo', 'CodigoGenerico', 'EstadoArticulo']).agg(
         pl.col('Cantidad').sum().alias('Cantidad'),
         pl.col('ValorUnitario').mean().alias('ValorUnitario'),
         pl.col('TotalBruto').sum().alias('TotalBruto'),
@@ -205,11 +205,6 @@ def cargar_datos(rutas: dict = None):
         .otherwise(pl.col('Servicio'))
         .alias("Servicio_Corregido")
     )
-    entradas_de_facturacion = entradas_de_facturacion.with_columns(
-        pl.when((pl.col("Especialidad").is_null()) | (pl.col("Especialidad") == ""))
-        .then(pl.col("Servicio_Corregido"))
-    )
-
     entradas_de_facturacion = entradas_de_facturacion.join(facturacion_productos, left_on="ADM-CodGen", right_on="ADM-CodGen", how="left").sort('idadmision')
     consumos_with_fact = consumos_with_fact.with_columns(
         pl.col("vrtotal").cast(pl.Float64),
@@ -249,11 +244,6 @@ def cargar_datos(rutas: dict = None):
     # anulados_limpieza.write_excel("anulados_limpieza_24-06-2026.xlsx")
     #print(limpieza_consumos_facturacion.filter(pl.col('MedicoRealiza').is_not_null()))
     #print(limpieza_consumos_facturacion.shape)
-
-    limpieza_consumos_facturacion = limpieza_consumos_facturacion.with_columns(
-        pl.when((pl.col("Especialidad").is_null()) | (pl.col("Especialidad") == ""))
-        .then(pl.col("Servicio_Corregido"))
-    )
 
     # limpieza_consumos_facturacion = limpieza_consumos_facturacion.group_by(["CentroCosto","Municipio","Servicio_Corregido", "Especialidad", "Servicio"]).agg(
     #     pl.col('ValorTotal').sum().cast(pl.Int64)
