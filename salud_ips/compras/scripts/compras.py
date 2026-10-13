@@ -127,6 +127,8 @@ def Analizando_compras(df_compras_aprovechamientos: pl.DataFrame):
     )
 
     # Entregable 4: Comportamientos mensuales
+    compras_proveedor_neto = compras_proveedor_neto.sort("Mes")
+    
     comportamiento_vunit = compras_proveedor_neto.pivot(
         on="Mes",
         index=['GrupoInventario', 'CodigoGenerico', 'Generico'],
@@ -153,6 +155,22 @@ def Analizando_compras(df_compras_aprovechamientos: pl.DataFrame):
     ).join(
         cant_registros_compras, on=['GrupoInventario', 'CodigoGenerico', 'Generico'], suffix="_cant_registros"
     ).fill_null(0)
+
+    # Ordenar columnas por mes
+    import re
+    filas_prod = ['GrupoInventario', 'CodigoGenerico', 'Generico']
+    metric_cols = [c for c in comportamientos_mensuales.columns if c not in filas_prod]
+    
+    def extract_month_metric(col_name):
+        match = re.search(r'(\d+)$', str(col_name))
+        if match:
+            return int(match.group(1))
+        if str(col_name).isdigit():
+            return int(col_name)
+        return 9999
+        
+    metric_cols = sorted(metric_cols, key=extract_month_metric)
+    comportamientos_mensuales = comportamientos_mensuales.select(filas_prod + metric_cols)
 
     print("✓ Finalizando el análisis de compras")
     return {

@@ -93,7 +93,7 @@ def analisis_movimientos_completos(compras : pl.DataFrame,movimientos_iniciales 
     ]
     agrupado = pl.concat(dfs_agrupados, how="diagonal_relaxed").group_by(uniones).sum().fill_null(0)
 
-    uniones_detallados = ["Fecha", "Bodega", "CodigoGenerico", "GrupoInventario", "Generico"]
+    uniones_detallados = ["Bodega", "CodigoGenerico", "GrupoInventario", "Generico"]
     compras_detallados = compras.group_by(uniones_detallados).agg(
         pl.col("Cantidad_total_compras").sum().alias("Cantidad_total_compras"),
         pl.col("ValorTotal_total_compras").sum().alias("ValorTotal_total_compras"),

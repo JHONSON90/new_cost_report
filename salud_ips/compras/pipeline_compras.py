@@ -45,6 +45,7 @@ from scripts.procesamiento import procesamiento
 from scripts.compras import Analizando_compras
 from scripts.saldos_prestamos import analisis_prestamos
 from scripts.movimiento_producto import analisis_movimientos_completos
+from scripts.consumos_mensuales import analisis_consumos_mensuales
 
 
 # ══════════════════════════════════════════════
@@ -81,9 +82,13 @@ class ComprasPipeline:
         self.prestamos_recibidos_analizados: pl.DataFrame | None = None
         self.df_prestamos_netos: dict[str, pl.DataFrame] | None = None
         self.df_movimientos_completos: dict[str, pl.DataFrame] | None = None
+        self.df_consumos_mensuales: dict[str, pl.DataFrame] | None = None
 
-    def _exportar_a_excel(self, dfs_dict: dict[str, pl.DataFrame], ruta_archivo: str | Path):
+    def _exportar_a_excel(self, dfs_dict: dict[str, pl.DataFrame] | pl.DataFrame, ruta_archivo: str | Path):
         """Helper robusto para exportar diccionarios de DataFrames de Polars a Excel."""
+        if isinstance(dfs_dict, pl.DataFrame):
+            dfs_dict = {"Datos": dfs_dict}
+            
         import xlsxwriter
         ruta = Path(ruta_archivo)
         ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -208,6 +213,27 @@ class ComprasPipeline:
             traceback.print_exc()
             raise
 
+    def paso6_analisis_consumos(self) -> dict[str, pl.DataFrame] | None:
+        """Paso 6: Ejecuta el analisis de los consumos mensuales para saber si hay patrones de consumo o si el consumo de un mes cubre con el siguiente"""
+        try:
+            self.df_consumos_mensuales = analisis_consumos_mensuales(self.df_neto_consumos)
+            
+            ruta_informe = Path(r"D:\proyectos\Reportes_saludips\Compras\Para Analizar")
+            nombre_archivo = f'Informe de consumos {datetime.now().strftime("%Y-%m-%d")}.xlsx'
+            ruta_completa = ruta_informe / nombre_archivo
+            
+            if self.df_consumos_mensuales is not None and len(self.df_consumos_mensuales) > 0:
+                self._exportar_a_excel(self.df_consumos_mensuales, ruta_completa)
+            
+            total_entregables = len(self.df_consumos_mensuales) if self.df_consumos_mensuales else 0
+            print(f"✓ Paso 6 completado exitosamente: {total_entregables} entregables de análisis generados.")
+            return self.df_consumos_mensuales
+        except Exception as e:
+            print(f"✗ Error en Paso 6 (Análisis de consumos): {e}")
+            traceback.print_exc()
+            raise
+        
+
     def ejecutar(self) -> dict:
         """
         Ejecuta todos los pasos del pipeline de compras de forma secuencial y cronometrada.
@@ -226,6 +252,7 @@ class ComprasPipeline:
             'paso_3_analisis_compras': None,
             'paso_4_analisis_prestamos': None,
             'paso_5_analisis_movimientos': None,
+            'paso_6_analisis_consumos': None,
             'exitoso': False,
         }
 
@@ -244,6 +271,9 @@ class ComprasPipeline:
 
             # Paso 5: Análisis de movimientos completos
             resultados['paso_5_analisis_movimientos'] = self.paso5_analisis_movimientos()
+
+            # Paso 6: Análisis de consumos mensuales
+            resultados['paso_6_analisis_consumos'] = self.paso6_analisis_consumos()
 
             resultados['exitoso'] = True
             duracion = time.time() - t_inicio
